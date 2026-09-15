@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 import logging
-from collections import Counter, deque
+import sys
+import time
+from collections import Counter, defaultdict, deque
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import networkx as nx
 
@@ -152,11 +154,69 @@ class Funnel:
         return dict(self.counts)
 
 
+class StageTimer:
+    """Print timed stage progress to stderr when verbose is enabled."""
+
+    def __init__(self, enabled: bool = False, stream=None) -> None:
+        self.enabled = enabled
+        self.stream = stream or sys.stderr
+        self._t0 = time.perf_counter()
+        self._last = self._t0
+
+    def stage(self, name: str, detail: str = "") -> None:
+        if not self.enabled:
+            return
+        now = time.perf_counter()
+        stage_s = now - self._last
+        total_s = now - self._t0
+        suffix = f" ({detail})" if detail else ""
+        print(
+            f"[generate] {name}{suffix}: {stage_s:.3f}s (total {total_s:.3f}s)",
+            file=self.stream,
+            flush=True,
+        )
+        self._last = now
+
+
+def _iter_related_leaf_pairs(
+    leaves_with_gloss: list[str],
+    paths_by_leaf: dict[str, dict[str, list[str]]],
+) -> Any:
+    """Yield each unordered leaf pair that shares at least one ancestor (once).
+
+    Avoids the naive all-pairs O(L^2) walk when most leaves do not share ancestry.
+    Worst case (one universal ancestor) is still O(L^2), but typical etymology
+    graphs are much sparser.
+    """
+    by_ancestor: dict[str, list[str]] = defaultdict(list)
+    for leaf_id in leaves_with_gloss:
+        for anc in paths_by_leaf[leaf_id]:
+            if anc != leaf_id:
+                by_ancestor[anc].append(leaf_id)
+
+    # Stable order: ancestors by descending fan-out then id; leaves sorted per bucket.
+    ancestor_order = sorted(by_ancestor.keys(), key=lambda a: (-len(by_ancestor[a]), a))
+    seen_pairs: set[tuple[str, str]] = set()
+    for anc in ancestor_order:
+        group = sorted(set(by_ancestor[anc]))
+        for i, leaf_a_id in enumerate(group):
+            for leaf_b_id in group[i + 1 :]:
+                key = (leaf_a_id, leaf_b_id) if leaf_a_id < leaf_b_id else (leaf_b_id, leaf_a_id)
+                if key in seen_pairs:
+                    continue
+                seen_pairs.add(key)
+                yield leaf_a_id, leaf_b_id
+
+
 def extract_candidates(
     g: nx.DiGraph,
     glosses: dict[str, str],
     cfg: dict[str, Any],
     funnel: Funnel,
+    *,
+    limit: int | None = None,
+    min_quality: int = 0,
+    progress: Callable[[str, str], None] | None = None,
 ) -> list[dict[str, Any]]:
     leaf_langs = cfg["leaf_languages"]
     ancestor_reltypes = set(cfg["ancestor_reltypes"])
@@ -167,120 +227,153 @@ def extract_candidates(
     max_overlap = float(generation_config["max_gloss_overlap"])
 
     leaves = [n for n, data in g.nodes(data=True) if data.get("lang") in leaf_langs]
+    leaves.sort()
     funnel.bump("leaves", len(leaves))
+    if progress:
+        progress("collect leaves", f"{len(leaves)} leaf nodes")
 
-    paths_by_leaf = {n: ancestor_paths(g, n, max_depth, ancestor_reltypes) for n in leaves}
-    candidates: list[dict[str, Any]] = []
-    seen_pairs: set[tuple[str, str, str]] = set()
-
-    for leaf_index, leaf_a_id in enumerate(leaves):
-        paths_a = paths_by_leaf[leaf_a_id]
-        lang_a = g.nodes[leaf_a_id]["lang"]
-        term_a = g.nodes[leaf_a_id]["term"]
-        gloss_a = gloss_for(glosses, lang_a, term_a)
-        if not gloss_a:
+    paths_by_leaf: dict[str, dict[str, list[str]]] = {}
+    leaves_with_gloss: list[str] = []
+    gloss_cache: dict[str, str] = {}
+    for n in leaves:
+        lang = g.nodes[n]["lang"]
+        term = g.nodes[n]["term"]
+        gloss = gloss_for(glosses, lang, term)
+        if not gloss:
             funnel.bump("no_gloss_leaf")
             continue
-        for leaf_b_id in leaves[leaf_index + 1 :]:
-            funnel.bump("pairs_considered")
-            lang_b = g.nodes[leaf_b_id]["lang"]
-            term_b = g.nodes[leaf_b_id]["term"]
-            gloss_b = gloss_for(glosses, lang_b, term_b)
-            if not gloss_b:
-                funnel.bump("no_gloss_leaf")
-                continue
-            paths_b = paths_by_leaf[leaf_b_id]
-            common = (set(paths_a) & set(paths_b)) - {leaf_a_id, leaf_b_id}
-            if not common:
-                funnel.bump("no_lca")
-                continue
+        gloss_cache[n] = gloss
+        paths_by_leaf[n] = ancestor_paths(g, n, max_depth, ancestor_reltypes)
+        leaves_with_gloss.append(n)
+    if progress:
+        progress(
+            "ancestor paths",
+            f"{len(leaves_with_gloss)} glossed leaves, {sum(len(p) for p in paths_by_leaf.values())} path entries",
+        )
 
-            ranked = sorted(
-                common,
-                key=lambda node: (len(paths_a[node]) + len(paths_b[node]), len(paths_a[node])),
+    candidates: list[dict[str, Any]] = []
+    seen_pairs: set[tuple[str, str, str]] = set()
+    good_count = 0
+    stop_at = None if not limit or limit <= 0 else limit
+
+    for leaf_a_id, leaf_b_id in _iter_related_leaf_pairs(leaves_with_gloss, paths_by_leaf):
+        funnel.bump("pairs_considered")
+        lang_a = g.nodes[leaf_a_id]["lang"]
+        term_a = g.nodes[leaf_a_id]["term"]
+        gloss_a = gloss_cache[leaf_a_id]
+        lang_b = g.nodes[leaf_b_id]["lang"]
+        term_b = g.nodes[leaf_b_id]["term"]
+        gloss_b = gloss_cache[leaf_b_id]
+        paths_a = paths_by_leaf[leaf_a_id]
+        paths_b = paths_by_leaf[leaf_b_id]
+        common = (set(paths_a) & set(paths_b)) - {leaf_a_id, leaf_b_id}
+        if not common:
+            funnel.bump("no_lca")
+            continue
+
+        ranked = sorted(
+            common,
+            key=lambda node: (len(paths_a[node]) + len(paths_b[node]), len(paths_a[node])),
+        )
+        chosen = None
+        node_list: list[str] = []
+        path_a: list[str] = []
+        path_b: list[str] = []
+        for lca_node_id in ranked:
+            nodes = subgraph_from_paths(paths_a[lca_node_id], paths_b[lca_node_id])
+            if len(nodes) < min_nodes:
+                continue
+            if len(nodes) > max_nodes:
+                continue
+            chosen = lca_node_id
+            node_list = nodes
+            path_a = paths_a[lca_node_id]
+            path_b = paths_b[lca_node_id]
+            break
+        if chosen is None:
+            too_big = any(
+                len(subgraph_from_paths(paths_a[lca_node_id], paths_b[lca_node_id])) > max_nodes
+                for lca_node_id in ranked
             )
-            chosen = None
-            for lca_node_id in ranked:
-                nodes = subgraph_from_paths(paths_a[lca_node_id], paths_b[lca_node_id])
-                if len(nodes) < min_nodes:
-                    continue
-                if len(nodes) > max_nodes:
-                    continue
-                chosen = lca_node_id
-                node_list = nodes
-                path_a = paths_a[lca_node_id]
-                path_b = paths_b[lca_node_id]
-                break
-            if chosen is None:
-                too_big = any(
-                    len(subgraph_from_paths(paths_a[lca_node_id], paths_b[lca_node_id])) > max_nodes
-                    for lca_node_id in ranked
-                )
-                funnel.bump("too_big" if too_big else "too_small")
-                continue
+            funnel.bump("too_big" if too_big else "too_small")
+            continue
 
-            lca_lang = g.nodes[chosen]["lang"]
-            lca_term = g.nodes[chosen]["term"]
-            lca_gloss = gloss_for(glosses, lca_lang, lca_term)
-            if not lca_gloss:
-                funnel.bump("no_gloss")
-                continue
+        lca_lang = g.nodes[chosen]["lang"]
+        lca_term = g.nodes[chosen]["term"]
+        lca_gloss = gloss_for(glosses, lca_lang, lca_term)
+        if not lca_gloss:
+            funnel.bump("no_gloss")
+            continue
 
-            if still_same_meaning(gloss_a, lca_gloss, max_overlap) and still_same_meaning(
-                gloss_b, lca_gloss, max_overlap
-            ):
-                funnel.bump("same_meaning")
-                continue
-            if still_same_meaning(gloss_a, gloss_b, max_overlap):
-                funnel.bump("same_meaning")
-                continue
+        if still_same_meaning(gloss_a, lca_gloss, max_overlap) and still_same_meaning(
+            gloss_b, lca_gloss, max_overlap
+        ):
+            funnel.bump("same_meaning")
+            continue
+        if still_same_meaning(gloss_a, gloss_b, max_overlap):
+            funnel.bump("same_meaning")
+            continue
 
-            n_nodes = len(node_list)
-            high_overlap = (
-                still_same_meaning(gloss_a, lca_gloss, max_overlap)
-                or still_same_meaning(gloss_b, lca_gloss, max_overlap)
-                or gloss_overlap(gloss_a, gloss_b) >= max_overlap
-            )
+        n_nodes = len(node_list)
+        high_overlap = (
+            still_same_meaning(gloss_a, lca_gloss, max_overlap)
+            or still_same_meaning(gloss_b, lca_gloss, max_overlap)
+            or gloss_overlap(gloss_a, gloss_b) >= max_overlap
+        )
 
-            key = tuple(sorted([leaf_a_id, leaf_b_id]) + [chosen])
-            if key in seen_pairs:
-                funnel.bump("duplicate_pair")
-                continue
-            seen_pairs.add(key)
+        key = tuple(sorted([leaf_a_id, leaf_b_id]) + [chosen])
+        if key in seen_pairs:
+            funnel.bump("duplicate_pair")
+            continue
+        seen_pairs.add(key)
 
-            edges: list[GraphEdge] = []
-            for path in (path_a, path_b):
-                for src, dst in zip(path, path[1:]):
-                    rel = g.edges[src, dst].get("reltype")
-                    edge = GraphEdge(source=src, target=dst, reltype=rel)
-                    if not any(e.source == src and e.target == dst for e in edges):
-                        edges.append(edge)
+        edges: list[GraphEdge] = []
+        for path in (path_a, path_b):
+            for src, dst in zip(path, path[1:]):
+                rel = g.edges[src, dst].get("reltype")
+                edge = GraphEdge(source=src, target=dst, reltype=rel)
+                if not any(e.source == src and e.target == dst for e in edges):
+                    edges.append(edge)
 
-            leaf_a = {"lang": lang_a, "term": term_a, "gloss": gloss_a}
-            leaf_b = {"lang": lang_b, "term": term_b, "gloss": gloss_b}
-            lca = {"lang": lca_lang, "term": lca_term, "gloss": lca_gloss, "id": chosen}
-            score = quality_score(
-                lang_a=lang_a,
-                lang_b=lang_b,
-                n_nodes=n_nodes,
-                high_overlap=high_overlap,
-                lca_is_modern=lca_lang in leaf_langs,
-                min_nodes=min_nodes,
-            )
-            candidates.append(
-                {
-                    "leaf_a": leaf_a,
-                    "leaf_b": leaf_b,
-                    "lca": lca,
-                    "nodes": node_list,
-                    "edges": edges,
-                    "quality_score": score,
-                    "lang_pair": lang_pair_code(lang_a, lang_b, leaf_langs),
-                    "graph": g,
-                }
-            )
-            funnel.bump("candidates")
+        leaf_a = {"lang": lang_a, "term": term_a, "gloss": gloss_a}
+        leaf_b = {"lang": lang_b, "term": term_b, "gloss": gloss_b}
+        lca = {"lang": lca_lang, "term": lca_term, "gloss": lca_gloss, "id": chosen}
+        score = quality_score(
+            lang_a=lang_a,
+            lang_b=lang_b,
+            n_nodes=n_nodes,
+            high_overlap=high_overlap,
+            lca_is_modern=lca_lang in leaf_langs,
+            min_nodes=min_nodes,
+        )
+        candidates.append(
+            {
+                "leaf_a": leaf_a,
+                "leaf_b": leaf_b,
+                "lca": lca,
+                "nodes": node_list,
+                "edges": edges,
+                "quality_score": score,
+                "lang_pair": lang_pair_code(lang_a, lang_b, leaf_langs),
+            }
+        )
+        funnel.bump("candidates")
+        if score >= min_quality:
+            good_count += 1
+            if stop_at is not None and good_count >= stop_at:
+                funnel.bump("early_exit")
+                if progress:
+                    progress(
+                        "candidate pairs",
+                        f"early exit at {good_count} >= min_quality (pairs={funnel.counts['pairs_considered']})",
+                    )
+                return candidates
 
+    if progress:
+        progress(
+            "candidate pairs",
+            f"{len(candidates)} candidates from {funnel.counts.get('pairs_considered', 0)} pairs",
+        )
     return candidates
 
 
@@ -363,6 +456,7 @@ def generate_puzzles(
     lang_pairs: list[str] | None = None,
     min_quality: int | None = None,
     cfg: dict[str, Any] | None = None,
+    verbose: bool = False,
 ) -> tuple[list[Puzzle], Funnel]:
     import random as random_mod
 
@@ -373,40 +467,62 @@ def generate_puzzles(
     min_quality = int(gen_cfg["min_quality"] if min_quality is None else min_quality)
     n_choices = int(gen_cfg["n_choices"])
     rng = random_mod.Random(seed)
+    timer = StageTimer(enabled=verbose)
 
     funnel = Funnel()
     edges = load_derived_edges()
     funnel.bump("derived_edges", len(edges))
+    timer.stage("load derived edges", f"{len(edges)} rows")
+
     glosses = load_gloss_index()
     funnel.bump("gloss_index", len(glosses))
+    timer.stage("load gloss index", f"{len(glosses)} entries")
+
     g = build_graph(edges, set(cfg["ancestor_reltypes"]))
     funnel.bump("graph_nodes", g.number_of_nodes())
     funnel.bump("graph_edges", g.number_of_edges())
+    timer.stage("build graph", f"{g.number_of_nodes()} nodes / {g.number_of_edges()} edges")
 
-    candidates = extract_candidates(g, glosses, cfg, funnel)
+    # When n > 0, stop once we have enough quality survivors. Oversample a little so
+    # post-filters (lang_pair) and quality sort still have headroom.
+    extract_limit: int | None = None
+    if n and n > 0:
+        extract_limit = n * 3 if lang_pairs else n
+
+    candidates = extract_candidates(
+        g,
+        glosses,
+        cfg,
+        funnel,
+        limit=extract_limit,
+        min_quality=min_quality,
+        progress=timer.stage if verbose else None,
+    )
     if lang_pairs:
         want = {p.lower() for p in lang_pairs}
         before = len(candidates)
         candidates = [c for c in candidates if c["lang_pair"] in want]
         funnel.bump("lang_pair_filtered", before - len(candidates))
+    timer.stage("filter lang pairs", f"{len(candidates)} left")
 
     before_q = len(candidates)
     candidates = [c for c in candidates if c["quality_score"] >= min_quality]
     funnel.bump("below_min_quality", before_q - len(candidates))
+    timer.stage("filter quality", f"{len(candidates)} left (min_quality={min_quality})")
 
     candidates.sort(key=lambda c: (-c["quality_score"], c["lang_pair"], c["leaf_a"]["term"], c["leaf_b"]["term"]))
+    if n and n > 0:
+        candidates = candidates[:n]
     distractors = [c["lca"]["gloss"] for c in candidates if c["lca"].get("gloss")]
 
     puzzles: list[Puzzle] = []
     for cand in candidates:
         choices, correct = make_choices(cand["lca"]["gloss"], distractors, n_choices, rng)
-        puzzles.append(to_puzzle(cand, choices, correct, cand["graph"]))
+        puzzles.append(to_puzzle(cand, choices, correct, g))
         funnel.bump("emitted")
+    timer.stage("emit puzzles", f"{len(puzzles)} puzzles")
 
-    if n and n > 0:
-        puzzles = puzzles[:n]
-        funnel.counts["emitted"] = len(puzzles)
-
+    funnel.counts["emitted"] = len(puzzles)
     return puzzles, funnel
 
 

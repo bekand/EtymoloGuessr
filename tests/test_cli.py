@@ -99,6 +99,25 @@ def test_generate_requires_derived(data_home: Path):
     assert result.exit_code != 0
 
 
+def test_generate_verbose_prints_stage_timings(data_home: Path):
+    assert runner.invoke(app, ["refresh", "--fixtures"]).exit_code == 0
+    result = runner.invoke(app, ["generate", "-v", "--n", "10", "--dry-run", "--seed", "1"])
+    assert result.exit_code == 0, result.output
+    err = result.stderr
+    assert "[generate] load derived edges" in err
+    assert "[generate] build graph" in err
+    assert "[generate] candidate pairs" in err or "[generate] ancestor paths" in err
+    assert "[generate] emit puzzles" in err
+    assert "s (total" in err
+
+
+def test_generate_verbose_via_global_flag(data_home: Path):
+    assert runner.invoke(app, ["refresh", "--fixtures"]).exit_code == 0
+    result = runner.invoke(app, ["-v", "generate", "--n", "2", "--dry-run"])
+    assert result.exit_code == 0, result.output
+    assert "[generate] load derived edges" in result.stderr
+
+
 def test_ids_stable(data_home: Path):
     runner.invoke(app, ["refresh", "--fixtures"])
     runner.invoke(app, ["generate", "--n", "0", "--seed", "99"])
