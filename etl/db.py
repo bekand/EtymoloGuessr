@@ -82,12 +82,14 @@ def puzzles_table_exists(conn: psycopg.Connection) -> bool:
 
 def _row(puzzle: Puzzle) -> dict[str, Any]:
     d = puzzle.to_dict()
+    # prompt_graph is derived from answer_graph; still written for the legacy
+    # Postgres column until Go migrations drop it.
     return {
         "id": d["id"],
         "enabled": d["enabled"],
         "leaf_a": Jsonb(d["leaf_a"]),
         "leaf_b": Jsonb(d["leaf_b"]),
-        "prompt_graph": Jsonb(d["prompt_graph"]),
+        "prompt_graph": Jsonb(puzzle.prompt_graph),
         "answer_graph": Jsonb(d["answer_graph"]),
         "choices": Jsonb(d["choices"]),
         "correct_choice": d["correct_choice"],

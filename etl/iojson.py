@@ -31,7 +31,7 @@ def read_jsonl(path: Path | None = None) -> list[Puzzle]:
                 continue
             try:
                 out.append(Puzzle.from_dict(json.loads(line)))
-            except (json.JSONDecodeError, KeyError, TypeError) as exc:
+            except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
                 raise SystemExit(f"{path}:{line_no}: invalid puzzle ({exc})") from exc
     return out
 

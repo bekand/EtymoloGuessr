@@ -45,7 +45,7 @@ def test_refresh_fixtures_generate_validate_inspect(data_home: Path):
     assert len(ids) == len(puzzles)
     for p in puzzles:
         assert 3 <= len(p["answer_graph"]["nodes"]) <= 5
-        assert p["prompt_graph"]["edges"] == []
+        assert "prompt_graph" not in p
         assert len(p["choices"]) == 4
         assert isinstance(p["quality_score"], int)
         assert 3 <= p["quality_score"] <= 5

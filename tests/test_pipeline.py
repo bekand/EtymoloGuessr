@@ -1,6 +1,7 @@
 from typing import Any, cast
 
 import pandas as pd
+import pytest
 
 from etl.derive import is_junk_term
 from etl.generate import (
@@ -199,14 +200,6 @@ def test_validate_happy_path():
         enabled=True,
         leaf_a={"lang": "English", "term": "gift", "gloss": "present"},
         leaf_b={"lang": "German", "term": "Gift", "gloss": "poison"},
-        prompt_graph={
-            "nodes": [
-                {"id": "English:gift", "role": "leaf"},
-                {"id": "German:Gift", "role": "leaf"},
-                {"id": "Proto-Germanic:*giftiz", "role": "ancestor"},
-            ],
-            "edges": [],
-        },
         answer_graph={
             "nodes": [
                 {"id": "English:gift", "role": "leaf"},
@@ -229,6 +222,9 @@ def test_validate_happy_path():
         lang_pair="de-en",
     )
     assert validate_puzzles([p]) == []
+    assert p.prompt_graph["edges"] == []
+    assert {n["id"] for n in p.prompt_graph["nodes"]} == {n["id"] for n in p.answer_graph["nodes"]}
+    assert "prompt_graph" not in p.to_dict()
 
 
 def test_validate_reports_malformed_choices_and_graph_together():
@@ -237,7 +233,6 @@ def test_validate_reports_malformed_choices_and_graph_together():
         enabled=True,
         leaf_a={"lang": "English", "term": "gift"},
         leaf_b={"lang": "German", "term": "Gift"},
-        prompt_graph={"nodes": [], "edges": []},
         answer_graph={"nodes": [], "edges": []},
         choices=cast(list[dict[str, Any]], ["not a choice"]),
         correct_choice="c0",
@@ -249,3 +244,53 @@ def test_validate_reports_malformed_choices_and_graph_together():
 
     assert any("choices must contain objects" in error for error in errors)
     assert any("answer graph must have" in error for error in errors)
+
+
+def test_from_dict_accepts_legacy_prompt_graph():
+    answer = {
+        "nodes": [
+            {"id": "English:gift", "role": "leaf"},
+            {"id": "German:Gift", "role": "leaf"},
+            {"id": "Proto-Germanic:*giftiz", "role": "ancestor"},
+        ],
+        "edges": [{"from": "English:gift", "to": "Proto-Germanic:*giftiz"}],
+    }
+    data = {
+        "id": "a" * 32,
+        "enabled": True,
+        "leaf_a": {"lang": "English", "term": "gift"},
+        "leaf_b": {"lang": "German", "term": "Gift"},
+        "prompt_graph": {"nodes": answer["nodes"], "edges": []},
+        "answer_graph": answer,
+        "choices": [
+            {"id": "c0", "gloss": "something given"},
+            {"id": "c1", "gloss": "a beast"},
+            {"id": "c2", "gloss": "to die"},
+            {"id": "c3", "gloss": "a servant"},
+        ],
+        "correct_choice": "c0",
+        "quality_score": 4,
+        "lang_pair": "de-en",
+    }
+    p = Puzzle.from_dict(data)
+    assert p.prompt_graph["edges"] == []
+    assert "prompt_graph" not in p.to_dict()
+
+
+def test_from_dict_rejects_inconsistent_legacy_prompt():
+    answer = {
+        "nodes": [{"id": "English:gift", "role": "leaf"}, {"id": "German:Gift", "role": "leaf"}],
+        "edges": [{"from": "English:gift", "to": "German:Gift"}],
+    }
+    data = {
+        "id": "a" * 32,
+        "leaf_a": {"lang": "English", "term": "gift"},
+        "leaf_b": {"lang": "German", "term": "Gift"},
+        "prompt_graph": {"nodes": answer["nodes"], "edges": answer["edges"]},
+        "answer_graph": answer,
+        "choices": [{"id": "c0", "gloss": "x"}] * 4,
+        "correct_choice": "c0",
+        "lang_pair": "de-en",
+    }
+    with pytest.raises(ValueError, match="legacy prompt_graph"):
+        Puzzle.from_dict(data)

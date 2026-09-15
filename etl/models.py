@@ -53,13 +53,28 @@ class Choice:
         return asdict(self)
 
 
+def prompt_graph_from_answer(answer_graph: dict[str, Any]) -> dict[str, Any]:
+    """Player-facing prompt: same nodes as gold, no edges.
+
+    Hard mode (future API) may further strip ancestor labels; easy mode
+    hides gold until solve. Both start from this derivation of answer_graph.
+    """
+    return {"nodes": list(answer_graph.get("nodes") or []), "edges": []}
+
+
+def legacy_prompt_is_consistent(prompt: dict[str, Any], answer: dict[str, Any]) -> bool:
+    """True if a stored prompt_graph matches the derived view of answer_graph."""
+    prompt_ids = {n.get("id") for n in (prompt.get("nodes") or []) if isinstance(n, dict)}
+    answer_ids = {n.get("id") for n in (answer.get("nodes") or []) if isinstance(n, dict)}
+    return prompt_ids == answer_ids and not (prompt.get("edges") or [])
+
+
 @dataclass
 class Puzzle:
     id: str
     enabled: bool
     leaf_a: dict[str, Any]
     leaf_b: dict[str, Any]
-    prompt_graph: dict[str, Any]
     answer_graph: dict[str, Any]
     choices: list[dict[str, Any]]
     correct_choice: str
@@ -68,13 +83,19 @@ class Puzzle:
     source: str = "etymology-db+kaikki"
     lca: dict[str, Any] = field(default_factory=dict)
 
+    @property
+    def prompt_graph(self) -> dict[str, Any]:
+        """Derived prompt view; not stored in JSONL."""
+        return prompt_graph_from_answer(self.answer_graph)
+
     def to_dict(self) -> dict[str, Any]:
+        # Store gold once. Consumers that need a prompt view call
+        # prompt_graph_from_answer / Puzzle.prompt_graph (or the future API).
         return {
             "id": self.id,
             "enabled": self.enabled,
             "leaf_a": self.leaf_a,
             "leaf_b": self.leaf_b,
-            "prompt_graph": self.prompt_graph,
             "answer_graph": self.answer_graph,
             "choices": self.choices,
             "correct_choice": self.correct_choice,
@@ -86,13 +107,20 @@ class Puzzle:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Puzzle:
+        answer = data["answer_graph"]
+        if "prompt_graph" in data:
+            prompt = data.get("prompt_graph") or {}
+            if not legacy_prompt_is_consistent(prompt, answer):
+                raise ValueError(
+                    "legacy prompt_graph must match derived view "
+                    "(same nodes as answer_graph, empty edges)"
+                )
         return cls(
             id=data["id"],
             enabled=bool(data.get("enabled", True)),
             leaf_a=data["leaf_a"],
             leaf_b=data["leaf_b"],
-            prompt_graph=data["prompt_graph"],
-            answer_graph=data["answer_graph"],
+            answer_graph=answer,
             choices=data["choices"],
             correct_choice=data["correct_choice"],
             quality_score=int(data.get("quality_score") or 0),

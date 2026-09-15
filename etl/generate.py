@@ -458,14 +458,12 @@ def to_puzzle(cand: dict[str, Any], choices: list[dict[str, Any]], correct: str,
         )
     edges = [e.to_dict() for e in cand["edges"]]
     graph = {"nodes": nodes, "edges": edges}
-    prompt = {"nodes": nodes, "edges": []}
     pid = puzzle_id(cand["leaf_a"], cand["leaf_b"], cand["lca"], edges)
     return Puzzle(
         id=pid,
         enabled=True,
         leaf_a=cand["leaf_a"],
         leaf_b=cand["leaf_b"],
-        prompt_graph=prompt,
         answer_graph=graph,
         choices=choices,
         correct_choice=correct,
