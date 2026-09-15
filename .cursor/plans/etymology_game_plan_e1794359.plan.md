@@ -4,13 +4,13 @@ overview: "Greenfield etymology guessing game: Python ETL, Go API + Postgres, an
 todos:
   - id: etl-cli
     content: "Python Typer CLI: refresh, generate (--n, stdout/jsonl/db), reset, doctor, stats, inspect, validate, load, disable"
-    status: pending
+    status: completed
   - id: etl-reduce
     content: Filter languages/reltypes, persist cleaned graph + gloss index as reusable artifacts
-    status: pending
+    status: completed
   - id: etl-puzzles
     content: Extract 3–5 node LCA puzzles, divergence filter, MC distractors, hashed ids, rejection log
-    status: pending
+    status: completed
   - id: db-api
     content: Postgres puzzle schema + Go API GET random / POST solve (hide gold until submit)
     status: pending
