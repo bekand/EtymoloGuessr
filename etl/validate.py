@@ -59,7 +59,6 @@ def validate_puzzle(p: Puzzle, errors: list[str], cfg: dict | None = None) -> No
     if not (min_nodes <= len(anodes) <= max_nodes):
         _err(errors, pid, f"answer graph must have {min_nodes}-{max_nodes} nodes, got {len(anodes)}")
     node_ids = {n.get("id") for n in anodes if isinstance(n, dict)}
-    # prompt_graph is derived at serve/emit time (same nodes, empty edges).
 
     leaf_ids = {
         f"{p.leaf_a.get('lang')}:{p.leaf_a.get('term')}",

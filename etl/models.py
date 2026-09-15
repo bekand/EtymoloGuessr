@@ -58,15 +58,9 @@ def prompt_graph_from_answer(answer_graph: dict[str, Any]) -> dict[str, Any]:
 
     Hard mode (future API) may further strip ancestor labels; easy mode
     hides gold until solve. Both start from this derivation of answer_graph.
+    Not persisted — derive at inspect/API serve time.
     """
     return {"nodes": list(answer_graph.get("nodes") or []), "edges": []}
-
-
-def legacy_prompt_is_consistent(prompt: dict[str, Any], answer: dict[str, Any]) -> bool:
-    """True if a stored prompt_graph matches the derived view of answer_graph."""
-    prompt_ids = {n.get("id") for n in (prompt.get("nodes") or []) if isinstance(n, dict)}
-    answer_ids = {n.get("id") for n in (answer.get("nodes") or []) if isinstance(n, dict)}
-    return prompt_ids == answer_ids and not (prompt.get("edges") or [])
 
 
 @dataclass
@@ -85,7 +79,7 @@ class Puzzle:
 
     @property
     def prompt_graph(self) -> dict[str, Any]:
-        """Derived prompt view; not stored in JSONL."""
+        """Derived prompt view; not stored in JSONL or Postgres."""
         return prompt_graph_from_answer(self.answer_graph)
 
     def to_dict(self) -> dict[str, Any]:
@@ -107,20 +101,16 @@ class Puzzle:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Puzzle:
-        answer = data["answer_graph"]
         if "prompt_graph" in data:
-            prompt = data.get("prompt_graph") or {}
-            if not legacy_prompt_is_consistent(prompt, answer):
-                raise ValueError(
-                    "legacy prompt_graph must match derived view "
-                    "(same nodes as answer_graph, empty edges)"
-                )
+            raise ValueError(
+                "prompt_graph is not stored; derive via prompt_graph_from_answer(answer_graph)"
+            )
         return cls(
             id=data["id"],
             enabled=bool(data.get("enabled", True)),
             leaf_a=data["leaf_a"],
             leaf_b=data["leaf_b"],
-            answer_graph=answer,
+            answer_graph=data["answer_graph"],
             choices=data["choices"],
             correct_choice=data["correct_choice"],
             quality_score=int(data.get("quality_score") or 0),

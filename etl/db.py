@@ -15,7 +15,6 @@ PUZZLES_COLUMNS = (
     "enabled",
     "leaf_a",
     "leaf_b",
-    "prompt_graph",
     "answer_graph",
     "choices",
     "correct_choice",
@@ -26,17 +25,16 @@ PUZZLES_COLUMNS = (
 
 UPSERT_SQL = """
 INSERT INTO puzzles (
-    id, enabled, leaf_a, leaf_b, prompt_graph, answer_graph,
+    id, enabled, leaf_a, leaf_b, answer_graph,
     choices, correct_choice, quality_score, lang_pair, source
 ) VALUES (
-    %(id)s, %(enabled)s, %(leaf_a)s, %(leaf_b)s, %(prompt_graph)s, %(answer_graph)s,
+    %(id)s, %(enabled)s, %(leaf_a)s, %(leaf_b)s, %(answer_graph)s,
     %(choices)s, %(correct_choice)s, %(quality_score)s, %(lang_pair)s, %(source)s
 )
 ON CONFLICT (id) DO UPDATE SET
     enabled = EXCLUDED.enabled,
     leaf_a = EXCLUDED.leaf_a,
     leaf_b = EXCLUDED.leaf_b,
-    prompt_graph = EXCLUDED.prompt_graph,
     answer_graph = EXCLUDED.answer_graph,
     choices = EXCLUDED.choices,
     correct_choice = EXCLUDED.correct_choice,
@@ -82,14 +80,11 @@ def puzzles_table_exists(conn: psycopg.Connection) -> bool:
 
 def _row(puzzle: Puzzle) -> dict[str, Any]:
     d = puzzle.to_dict()
-    # prompt_graph is derived from answer_graph; still written for the legacy
-    # Postgres column until Go migrations drop it.
     return {
         "id": d["id"],
         "enabled": d["enabled"],
         "leaf_a": Jsonb(d["leaf_a"]),
         "leaf_b": Jsonb(d["leaf_b"]),
-        "prompt_graph": Jsonb(puzzle.prompt_graph),
         "answer_graph": Jsonb(d["answer_graph"]),
         "choices": Jsonb(d["choices"]),
         "correct_choice": d["correct_choice"],
