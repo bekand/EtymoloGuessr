@@ -246,7 +246,7 @@ def test_validate_reports_malformed_choices_and_graph_together():
     assert any("answer graph must have" in error for error in errors)
 
 
-def test_from_dict_accepts_legacy_prompt_graph():
+def test_from_dict_round_trips_answer_only():
     answer = {
         "nodes": [
             {"id": "English:gift", "role": "leaf"},
@@ -260,7 +260,6 @@ def test_from_dict_accepts_legacy_prompt_graph():
         "enabled": True,
         "leaf_a": {"lang": "English", "term": "gift"},
         "leaf_b": {"lang": "German", "term": "Gift"},
-        "prompt_graph": {"nodes": answer["nodes"], "edges": []},
         "answer_graph": answer,
         "choices": [
             {"id": "c0", "gloss": "something given"},
@@ -274,10 +273,11 @@ def test_from_dict_accepts_legacy_prompt_graph():
     }
     p = Puzzle.from_dict(data)
     assert p.prompt_graph["edges"] == []
+    assert {n["id"] for n in p.prompt_graph["nodes"]} == {n["id"] for n in answer["nodes"]}
     assert "prompt_graph" not in p.to_dict()
 
 
-def test_from_dict_rejects_inconsistent_legacy_prompt():
+def test_from_dict_rejects_stored_prompt_graph():
     answer = {
         "nodes": [{"id": "English:gift", "role": "leaf"}, {"id": "German:Gift", "role": "leaf"}],
         "edges": [{"from": "English:gift", "to": "German:Gift"}],
@@ -286,11 +286,11 @@ def test_from_dict_rejects_inconsistent_legacy_prompt():
         "id": "a" * 32,
         "leaf_a": {"lang": "English", "term": "gift"},
         "leaf_b": {"lang": "German", "term": "Gift"},
-        "prompt_graph": {"nodes": answer["nodes"], "edges": answer["edges"]},
+        "prompt_graph": {"nodes": answer["nodes"], "edges": []},
         "answer_graph": answer,
         "choices": [{"id": "c0", "gloss": "x"}] * 4,
         "correct_choice": "c0",
         "lang_pair": "de-en",
     }
-    with pytest.raises(ValueError, match="legacy prompt_graph"):
+    with pytest.raises(ValueError, match="prompt_graph is not stored"):
         Puzzle.from_dict(data)

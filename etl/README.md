@@ -36,16 +36,14 @@ The CLI never creates the `puzzles` table. Go owns migrations. ETL assumes the t
 
 Expected columns: `id`, `enabled`, `leaf_a`, `leaf_b`, `answer_graph`, `choices`, `correct_choice`, `quality_score`, `lang_pair`, `source`. Upserts key on `id`.
 
-Canonical gold is **`answer_graph` only**. The player prompt is derived as `{nodes: answer_graph.nodes, edges: []}` (`etl.models.prompt_graph_from_answer`). JSONL no longer stores `prompt_graph`. Upserts still write a derived `prompt_graph` column for legacy Postgres schemas until Go migrations drop it; the future API should derive at serve time (hard mode may further strip ancestor labels).
-
-### Migration notes (`prompt_graph`)
+Canonical gold is **`answer_graph` only**. The player prompt is derived as `{nodes: answer_graph.nodes, edges: []}` (`etl.models.prompt_graph_from_answer` / `Puzzle.prompt_graph`). JSONL and Postgres store only `answer_graph` — no `prompt_graph` field or column. The future API should derive the prompt at serve time (hard mode may further strip ancestor labels).
 
 | Surface | Behavior |
 |---|---|
-| New JSONL / `to_dict()` | Omits `prompt_graph` |
-| Load / `from_dict()` | Accepts legacy rows if `prompt_graph` matches the derivation; rejects inconsistent duplicates |
-| Postgres upsert | Still populates `prompt_graph` as the derivation (compat) |
-| Validate | Checks `answer_graph` structure; does not require a stored prompt field |
+| JSONL / `to_dict()` | Omits `prompt_graph` |
+| Load / `from_dict()` | Requires `answer_graph`; rejects payloads that still include `prompt_graph` |
+| Postgres upsert | Writes `answer_graph` only |
+| Validate | Checks `answer_graph` structure |
 | Go API (planned) | `GET` builds prompt from gold; never send edges / `correct_choice` until solve |
 
 ## Data sources and license
@@ -200,7 +198,7 @@ uv run etl inspect --db <id>
 
 ### `etl validate`
 
-Schema-check a puzzle set. Failures include: not exactly 4 choices, duplicate ids, graph not 3–5 nodes, leaves missing from the graph, gold edges that reference unknown node ids, distractors equal to the correct gloss. Legacy rows that still include `prompt_graph` must match the derived view (same nodes, empty edges).
+Schema-check a puzzle set. Failures include: not exactly 4 choices, duplicate ids, graph not 3–5 nodes, leaves missing from the graph, gold edges that reference unknown node ids, distractors equal to the correct gloss. Payloads must not include a stored `prompt_graph` (derive from `answer_graph` instead).
 
 ```bash
 uv run etl validate
