@@ -327,6 +327,9 @@ def extract_candidates(
 
         lca_lang = g.nodes[chosen]["lang"]
         lca_term = g.nodes[chosen]["term"]
+        if not lca_term or len(lca_term) < 3:
+            funnel.bump("lca_term_too_short")
+            continue
         lca_gloss = gloss_for(glosses, lca_lang, lca_term)
         if not lca_gloss:
             funnel.bump("no_gloss")

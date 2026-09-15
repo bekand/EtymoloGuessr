@@ -58,8 +58,8 @@ A full refresh is tens of minutes and hundreds of MB. The usual loop is `generat
 ## Pipeline stages
 
 1. **Reduce graph** — keep leaf langs English / Spanish / Portuguese / German and the ancestor allowlist in config; keep `inherited_from`, `borrowed_from`, `derived_from`, `root`, `cognate_of`, `doublet_with`; drop null related terms, multiword junk, affixes.
-2. **Index glosses** — first gloss per `(lang, term)`. Puzzles with no LCA gloss are skipped.
-3. **Extract puzzles** — two modern leaves, connecting subgraph of 3-5 nodes, prefer cross-language via quality score, reject pairs where both leaves still mean the ancestor, 4-way multiple-choice from other LCA glosses.
+2. **Index glosses** — first gloss per `(lang, term)`. Puzzles with no LCA gloss are skipped (`no_gloss`).
+3. **Extract puzzles** — two modern leaves, connecting subgraph of 3-5 nodes, prefer cross-language via quality score, reject pairs where both leaves still mean the ancestor, reject LCA terms shorter than 3 characters (`lca_term_too_short`), 4-way multiple-choice from other LCA glosses.
 4. **Ids** — SHA-256 of `(leaf_a, leaf_b, lca, gold edges)` so reruns upsert instead of duplicating. `--seed` controls sampling and choice shuffle.
 
 Walks toward ancestors use `inherited_from` / `borrowed_from` / `derived_from` / `root` only.
@@ -81,6 +81,7 @@ Same-language pairs top out at **2**, so the default `--min-quality` of **3** dr
 ### Leaf filters and batch diversity
 
 - **Proper nouns** — English / Spanish / Portuguese leaves whose term starts with an uppercase letter are skipped (`proper_noun_leaf`). German is exempt (common nouns are capitalized).
+- **Short / unglossed LCA** — LCA terms shorter than 3 characters are skipped (`lca_term_too_short`); missing LCA gloss uses existing `no_gloss`.
 - **Leaf reuse** — within one `generate` batch, each `(lang, term)` may appear as a leaf in at most one emitted puzzle (`leaf_reuse`), so `--n 10` does not repeat the same word ten times.
 - **Distractors** — multiple-choice options come from other candidates’ LCA glosses. If fewer than `n_choices - 1` distinct real glosses are available, the candidate is rejected (`insufficient_distractors`); placeholders are never emitted.
 
@@ -134,7 +135,7 @@ If you omit every sink, output is `data/puzzles/puzzles.jsonl`. Funnel counts al
 
 With `--n > 0`, candidate search **early-exits** once enough quality survivors are found (and only walks leaf pairs that share an ancestor). Use `--n 0` for a full pass. Early exit can change which top-N puzzles you get versus an exhaustive quality sort over every pair.
 
-Rejection reasons in the funnel include `no_gloss`, `too_big`, `too_small`, `same_meaning`, `no_lca`, `proper_noun_leaf`, `below_min_quality`, `leaf_reuse`, `insufficient_distractors`, `early_exit`.
+Rejection reasons in the funnel include `no_gloss`, `lca_term_too_short`, `too_big`, `too_small`, `same_meaning`, `no_lca`, `proper_noun_leaf`, `below_min_quality`, `leaf_reuse`, `insufficient_distractors`, `early_exit`.
 
 ### `etl reset`
 

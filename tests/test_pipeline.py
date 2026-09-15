@@ -194,6 +194,77 @@ def test_extract_candidates_skips_unrelated_leaf_pairs():
     assert funnel.counts["pairs_considered"] == 2
 
 
+def _two_leaf_lca_cfg() -> dict[str, Any]:
+    return {
+        "leaf_languages": {"English": "en", "Spanish": "es", "Portuguese": "pt", "German": "de"},
+        "ancestor_reltypes": ["inherited_from"],
+        "generate": {
+            "min_nodes": 3,
+            "max_nodes": 5,
+            "max_ancestor_depth": 6,
+            "max_gloss_overlap": 0.5,
+        },
+    }
+
+
+def test_extract_candidates_rejects_short_lca_term():
+    """LCA terms shorter than 3 characters are rejected (funnel: lca_term_too_short)."""
+    rows = [
+        dict(term="leafx", lang="English", reltype="inherited_from", related_term="ab", related_lang="Proto-Germanic"),
+        dict(term="leafy", lang="German", reltype="inherited_from", related_term="ab", related_lang="Proto-Germanic"),
+    ]
+    glosses = {
+        "English\tleafx": "modern sense alpha zebra",
+        "German\tleafy": "modern sense beta quartz",
+        "Proto-Germanic\tab": "ancient short root poison",
+    }
+    g = build_graph(pd.DataFrame(rows), {"inherited_from"})
+    funnel = Funnel()
+    cands = extract_candidates(g, glosses, _two_leaf_lca_cfg(), funnel)
+    assert cands == []
+    assert funnel.counts.get("lca_term_too_short", 0) >= 1
+    assert funnel.counts.get("candidates", 0) == 0
+
+
+def test_extract_candidates_rejects_missing_lca_gloss():
+    """Missing LCA gloss is rejected via existing no_gloss funnel reason."""
+    rows = [
+        dict(term="leafx", lang="English", reltype="inherited_from", related_term="*longroot", related_lang="Proto-Germanic"),
+        dict(term="leafy", lang="German", reltype="inherited_from", related_term="*longroot", related_lang="Proto-Germanic"),
+    ]
+    glosses = {
+        "English\tleafx": "modern sense alpha zebra",
+        "German\tleafy": "modern sense beta quartz",
+        # intentionally no Proto-Germanic:*longroot gloss
+    }
+    g = build_graph(pd.DataFrame(rows), {"inherited_from"})
+    funnel = Funnel()
+    cands = extract_candidates(g, glosses, _two_leaf_lca_cfg(), funnel)
+    assert cands == []
+    assert funnel.counts.get("no_gloss", 0) >= 1
+    assert funnel.counts.get("candidates", 0) == 0
+
+
+def test_extract_candidates_accepts_lca_term_length_three():
+    """Boundary: LCA term of exactly 3 characters is allowed when glossed."""
+    rows = [
+        dict(term="leafx", lang="English", reltype="inherited_from", related_term="abc", related_lang="Proto-Germanic"),
+        dict(term="leafy", lang="German", reltype="inherited_from", related_term="abc", related_lang="Proto-Germanic"),
+    ]
+    glosses = {
+        "English\tleafx": "modern sense alpha zebra",
+        "German\tleafy": "modern sense beta quartz",
+        "Proto-Germanic\tabc": "ancient root poison venom",
+    }
+    g = build_graph(pd.DataFrame(rows), {"inherited_from"})
+    funnel = Funnel()
+    cands = extract_candidates(g, glosses, _two_leaf_lca_cfg(), funnel)
+    assert len(cands) >= 1
+    assert cands[0]["lca"]["term"] == "abc"
+    assert funnel.counts.get("lca_term_too_short", 0) == 0
+    assert funnel.counts.get("no_gloss", 0) == 0
+
+
 def test_validate_happy_path():
     p = Puzzle(
         id="a" * 32,
