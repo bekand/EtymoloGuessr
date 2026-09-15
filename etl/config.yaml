@@ -60,8 +60,8 @@ ancestor_reltypes:
   - root
 
 generate:
-  n: 50
-  min_quality: 3
+  n: 200
+  min_quality: 2
   min_nodes: 3
   max_nodes: 5
   max_ancestor_depth: 6
@@ -103,37 +103,42 @@ sources:
       sha256: null
       bytes_estimate: 40000000
     - name: kaikki-Old-English.jsonl
-      url: https://kaikki.org/dictionary/Old%20English/kaikki.org-dictionary-Old%20English.jsonl
+      url: https://kaikki.org/dictionary/Old%20English/kaikki.org-dictionary-OldEnglish.jsonl
       lang: Old English
       sha256: null
       bytes_estimate: 15000000
     - name: kaikki-Old-High-German.jsonl
-      url: https://kaikki.org/dictionary/Old%20High%20German/kaikki.org-dictionary-Old%20High%20German.jsonl
+      url: https://kaikki.org/dictionary/Old%20High%20German/kaikki.org-dictionary-OldHighGerman.jsonl
       lang: Old High German
       sha256: null
       bytes_estimate: 8000000
     - name: kaikki-Old-French.jsonl
-      url: https://kaikki.org/dictionary/Old%20French/kaikki.org-dictionary-Old%20French.jsonl
+      url: https://kaikki.org/dictionary/Old%20French/kaikki.org-dictionary-OldFrench.jsonl
       lang: Old French
       sha256: null
       bytes_estimate: 15000000
     - name: kaikki-Old-Norse.jsonl
-      url: https://kaikki.org/dictionary/Old%20Norse/kaikki.org-dictionary-Old%20Norse.jsonl
+      url: https://kaikki.org/dictionary/Old%20Norse/kaikki.org-dictionary-OldNorse.jsonl
       lang: Old Norse
       sha256: null
       bytes_estimate: 10000000
+    - name: kaikki-Ancient-Greek.jsonl
+      url: https://kaikki.org/dictionary/Ancient%20Greek/kaikki.org-dictionary-AncientGreek.jsonl
+      lang: Ancient Greek
+      sha256: null
+      bytes_estimate: 400000000
     - name: kaikki-Arabic.jsonl
       url: https://kaikki.org/dictionary/Arabic/kaikki.org-dictionary-Arabic.jsonl
       lang: Arabic
       sha256: null
       bytes_estimate: 80000000
     - name: kaikki-Proto-Germanic.jsonl
-      url: https://kaikki.org/dictionary/Proto-Germanic/kaikki.org-dictionary-Proto-Germanic.jsonl
+      url: https://kaikki.org/dictionary/Proto-Germanic/kaikki.org-dictionary-ProtoGermanic.jsonl
       lang: Proto-Germanic
       sha256: null
       bytes_estimate: 8000000
     - name: kaikki-Proto-Indo-European.jsonl
-      url: https://kaikki.org/dictionary/Proto-Indo-European/kaikki.org-dictionary-Proto-Indo-European.jsonl
+      url: https://kaikki.org/dictionary/Proto-Indo-European/kaikki.org-dictionary-ProtoIndoEuropean.jsonl
       lang: Proto-Indo-European
       sha256: null
       bytes_estimate: 8000000
