@@ -8,6 +8,8 @@ from etl.generate import (
     build_graph,
     extract_candidates,
     gloss_overlap,
+    is_proper_noun_leaf,
+    leaf_reuse_key,
     make_choices,
     quality_score,
     still_same_meaning,
@@ -23,6 +25,18 @@ def test_junk_terms():
     assert is_junk_term("junk compound")
     assert not is_junk_term("*giftiz")
     assert not is_junk_term("gift")
+
+
+def test_proper_noun_leaf_filter():
+    assert is_proper_noun_leaf("English", "Paris")
+    assert is_proper_noun_leaf("Spanish", "Madrid")
+    assert is_proper_noun_leaf("Portuguese", "Lisboa")
+    assert not is_proper_noun_leaf("English", "gift")
+    assert not is_proper_noun_leaf("English", "patio")
+    # German capitalizes common nouns — not treated as proper nouns here.
+    assert not is_proper_noun_leaf("German", "Gift")
+    assert not is_proper_noun_leaf("German", "Hund")
+    assert leaf_reuse_key("English", "gift") == "English\tgift"
 
 
 def test_gloss_overlap_detects_same_meaning():
@@ -45,7 +59,7 @@ def test_puzzle_id_order_invariant():
 def test_quality_score_is_integer_rubric():
     base: dict[str, Any] = dict(n_nodes=4, high_overlap=False, lca_is_modern=False)
     assert quality_score(lang_a="English", lang_b="German", **base) == 5
-    assert quality_score(lang_a="English", lang_b="English", **base) == 3
+    assert quality_score(lang_a="English", lang_b="English", **base) == 2  # −3 same-lang
     assert quality_score(lang_a="Spanish", lang_b="Portuguese", **base) == 4
     assert quality_score(lang_a="English", lang_b="German", **{**base, "lca_is_modern": True}) == 4
     assert quality_score(lang_a="English", lang_b="German", **{**base, "high_overlap": True}) == 4
@@ -71,20 +85,25 @@ def test_quality_score_is_integer_rubric():
     )
 
 
-def test_make_choices_uses_unique_placeholders():
-    choices, correct_id = make_choices(
+def test_make_choices_requires_real_distractors():
+    rng = __import__("random").Random(1)
+    assert make_choices("ancestor gloss", ["only one other"], n_choices=4, rng=rng) is None
+    built = make_choices(
         "ancestor gloss",
-        ["(unrelated) sense 1"],
+        ["sense a", "sense b", "sense c", "ancestor gloss"],
         n_choices=4,
-        rng=__import__("random").Random(1),
+        rng=rng,
     )
-
+    assert built is not None
+    choices, correct_id = built
     glosses = [choice["gloss"] for choice in choices]
-    assert len(glosses) == len(set(glosses))
+    assert len(glosses) == 4
+    assert len(set(glosses)) == 4
+    assert all(not g.startswith("(unrelated)") for g in glosses)
     assert choices[[choice["id"] for choice in choices].index(correct_id)]["gloss"] == "ancestor gloss"
 
 
-def _synth_shift_graph(n_leaves: int, shared_ancestors: int = 20):
+def _synth_shift_graph(n_leaves: int, shared_ancestors: int = 20, *, include_proper: bool = False):
     """Many modern leaves under proto ancestors with distinct glosses (semantic shift)."""
     rows = []
     glosses: dict[str, str] = {}
@@ -92,7 +111,7 @@ def _synth_shift_graph(n_leaves: int, shared_ancestors: int = 20):
         glosses[f"Proto-Germanic\t*root{i}"] = f"ancient sense {i} poison venom toxin"
     for i in range(n_leaves):
         leaf_lang = ["English", "German", "Spanish", "Portuguese"][i % 4]
-        term = f"word{i}"
+        term = f"Word{i}" if include_proper and leaf_lang == "English" and i % 8 == 0 else f"word{i}"
         anc = f"*root{i % shared_ancestors}"
         rows.append(
             dict(
@@ -115,7 +134,7 @@ def _synth_shift_graph(n_leaves: int, shared_ancestors: int = 20):
             "max_ancestor_depth": 6,
             "max_gloss_overlap": 0.5,
             "n": 10,
-            "min_quality": 2,
+            "min_quality": 3,
             "n_choices": 4,
             "seed": 1,
         },
@@ -126,12 +145,19 @@ def _synth_shift_graph(n_leaves: int, shared_ancestors: int = 20):
 def test_extract_candidates_early_exit_respects_limit():
     g, glosses, cfg = _synth_shift_graph(400, shared_ancestors=10)
     funnel = Funnel()
-    cands = extract_candidates(g, glosses, cfg, funnel, limit=10, min_quality=2)
+    cands = extract_candidates(g, glosses, cfg, funnel, limit=10, min_quality=3)
     assert len(cands) >= 10
-    assert sum(1 for c in cands if c["quality_score"] >= 2) >= 10
+    assert sum(1 for c in cands if c["quality_score"] >= 3) >= 10
     assert funnel.counts.get("early_exit", 0) == 1
     # Without early exit this graph considers tens of thousands of related pairs.
     assert funnel.counts["pairs_considered"] < 5000
+
+
+def test_extract_candidates_skips_proper_noun_leaves():
+    g, glosses, cfg = _synth_shift_graph(40, shared_ancestors=8, include_proper=True)
+    funnel = Funnel()
+    extract_candidates(g, glosses, cfg, funnel)
+    assert funnel.counts.get("proper_noun_leaf", 0) >= 1
 
 
 def test_extract_candidates_skips_unrelated_leaf_pairs():

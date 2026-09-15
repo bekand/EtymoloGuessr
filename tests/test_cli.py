@@ -48,10 +48,23 @@ def test_refresh_fixtures_generate_validate_inspect(data_home: Path):
         assert p["prompt_graph"]["edges"] == []
         assert len(p["choices"]) == 4
         assert isinstance(p["quality_score"], int)
-        assert 0 <= p["quality_score"] <= 5
+        assert 3 <= p["quality_score"] <= 5
+        glosses = [c["gloss"] for c in p["choices"]]
+        assert all(not g.startswith("(unrelated)") for g in glosses)
+        assert len(set(glosses)) == 4
         terms = {p["leaf_a"]["term"], p["leaf_b"]["term"]}
         assert terms != {"hound", "Hund"}
         assert terms != {"padre"}
+        assert "Paris" not in terms
+        assert p["leaf_a"]["lang"] != p["leaf_b"]["lang"]
+
+    # Leaf reuse: no (lang, term) appears twice as a leaf across the batch.
+    seen_leaves: set[tuple[str, str]] = set()
+    for p in puzzles:
+        for leaf in (p["leaf_a"], p["leaf_b"]):
+            key = (leaf["lang"], leaf["term"])
+            assert key not in seen_leaves
+            seen_leaves.add(key)
 
     result = runner.invoke(app, ["validate"])
     assert result.exit_code == 0, result.output
@@ -125,6 +138,17 @@ def test_ids_stable(data_home: Path):
     runner.invoke(app, ["generate", "--n", "0", "--seed", "99"])
     second = [json.loads(l) for l in (data_home / "puzzles" / "puzzles.jsonl").read_text().splitlines() if l]
     assert [p["id"] for p in first] == [p["id"] for p in second]
+
+
+def test_generate_default_min_quality_and_no_placeholders(data_home: Path):
+    assert runner.invoke(app, ["refresh", "--fixtures"]).exit_code == 0
+    result = runner.invoke(app, ["generate", "--n", "5", "--stdout", "--seed", "1"])
+    assert result.exit_code == 0, result.output
+    puzzles = json.loads(result.stdout)
+    assert len(puzzles) >= 1
+    for p in puzzles:
+        assert p["quality_score"] >= 3
+        assert all(not c["gloss"].startswith("(unrelated)") for c in p["choices"])
 
 
 def test_validate_rejects_bad_file(tmp_path: Path):

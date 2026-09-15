@@ -17,6 +17,14 @@
 {"term": "window", "lang": "English", "reltype": "inherited_from", "related_term": "vindauga", "related_lang": "Old Norse"}
 {"term": "vindauga", "lang": "Old Norse", "reltype": "inherited_from", "related_term": "*windą", "related_lang": "Proto-Germanic"}
 {"term": "Wind", "lang": "German", "reltype": "inherited_from", "related_term": "*windą", "related_lang": "Proto-Germanic"}
+{"term": "bread", "lang": "English", "reltype": "inherited_from", "related_term": "brēad", "related_lang": "Old English"}
+{"term": "brēad", "lang": "Old English", "reltype": "inherited_from", "related_term": "*braudą", "related_lang": "Proto-Germanic"}
+{"term": "Brot", "lang": "German", "reltype": "inherited_from", "related_term": "*braudą", "related_lang": "Proto-Germanic"}
+{"term": "guest", "lang": "English", "reltype": "inherited_from", "related_term": "*gastiz", "related_lang": "Proto-Germanic"}
+{"term": "Gast", "lang": "German", "reltype": "inherited_from", "related_term": "*gastiz", "related_lang": "Proto-Germanic"}
+{"term": "host", "lang": "English", "reltype": "borrowed_from", "related_term": "hostis", "related_lang": "Latin"}
+{"term": "huésped", "lang": "Spanish", "reltype": "inherited_from", "related_term": "hostis", "related_lang": "Latin"}
+{"term": "Paris", "lang": "English", "reltype": "borrowed_from", "related_term": "Parisii", "related_lang": "Latin"}
 {"term": "junk compound", "lang": "English", "reltype": "inherited_from", "related_term": "foo", "related_lang": "Latin"}
 {"term": "-ness", "lang": "English", "reltype": "inherited_from", "related_term": "-nassu", "related_lang": "Old English"}
 {"term": "gift", "lang": "English", "reltype": "cognate_of", "related_term": "Gift", "related_lang": "German"}

@@ -60,13 +60,19 @@ Integer 0-5, stored on each puzzle. Start at 5, then:
 
 | Penalty | Points |
 |---|---|
-| Same leaf language | -2 |
+| Same leaf language | -3 |
 | Spanish–Portuguese pair | -1 |
 | LCA is a modern leaf language (EN/ES/PT/DE) | -1 |
 | High gloss overlap (either leaf still close to the LCA, or the two leaves to each other) | -1 |
 | Low node count (3 nodes, the minimum) | -1 |
 
-A pair of two different languages cannot fall below **1**, even with every other penalty. Same-language pairs can reach 0. Default `--min-quality` is `2` (config `generate.min_quality`).
+Same-language pairs top out at **2**, so the default `--min-quality` of **3** drops them. Default is config `generate.min_quality` (currently 3).
+
+### Leaf filters and batch diversity
+
+- **Proper nouns** — English / Spanish / Portuguese leaves whose term starts with an uppercase letter are skipped (`proper_noun_leaf`). German is exempt (common nouns are capitalized).
+- **Leaf reuse** — within one `generate` batch, each `(lang, term)` may appear as a leaf in at most one emitted puzzle (`leaf_reuse`), so `--n 10` does not repeat the same word ten times.
+- **Distractors** — multiple-choice options come from other candidates’ LCA glosses. If fewer than `n_choices - 1` distinct real glosses are available, the candidate is rejected (`insufficient_distractors`); placeholders are never emitted.
 
 ## Commands
 
@@ -94,7 +100,7 @@ uv run etl generate
 uv run etl generate --n 20 --seed 1
 uv run etl generate --n 0                          # all that pass filters
 uv run etl generate --lang-pair en-de --lang-pair en-es
-uv run etl generate --min-quality 3
+uv run etl generate --min-quality 4
 uv run etl generate --dry-run                      # funnel only, no write
 uv run etl generate --stdout                       # JSON array on stdout
 uv run etl generate --jsonl path/to/puzzles.jsonl
@@ -109,7 +115,7 @@ Flags:
 | `--n N` | Max puzzles. Default from `config.yaml` (`generate.n`, currently 50). `0` = emit every survivor |
 | `--seed` | Sampling and choice shuffle (default `generate.seed`) |
 | `--lang-pair` | Repeatable filter, codes like `en-de` (sorted alphabetically) |
-| `--min-quality` | Drop candidates below this integer score (default `generate.min_quality`, currently 2) |
+| `--min-quality` | Drop candidates below this integer score (default `generate.min_quality`, currently 3) |
 | `--stdout` / `--jsonl PATH` / `--db` | Mutually exclusive sinks |
 | `--dry-run` | Print counts / write `data/reports/funnel.json` only |
 | `--verbose` / `-v` | Timed stage progress on stderr (load derived, build graph, candidates, emit, write). Also accepted as `etl -v generate …` |
@@ -118,7 +124,7 @@ If you omit every sink, output is `data/puzzles/puzzles.jsonl`. Funnel counts al
 
 With `--n > 0`, candidate search **early-exits** once enough quality survivors are found (and only walks leaf pairs that share an ancestor). Use `--n 0` for a full pass. Early exit can change which top-N puzzles you get versus an exhaustive quality sort over every pair.
 
-Rejection reasons in the funnel include `no_gloss`, `too_big`, `too_small`, `same_meaning`, `no_lca`, `below_min_quality`, `early_exit`.
+Rejection reasons in the funnel include `no_gloss`, `too_big`, `too_small`, `same_meaning`, `no_lca`, `proper_noun_leaf`, `below_min_quality`, `leaf_reuse`, `insufficient_distractors`, `early_exit`.
 
 ### `etl reset`
 
