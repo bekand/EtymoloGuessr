@@ -1,0 +1,36 @@
+[project]
+name = "etymology-etl"
+version = "0.1.0"
+description = "ETL pipeline for the etymology guessing game"
+requires-python = ">=3.11"
+dependencies = [
+    "typer>=0.12.0",
+    "pyyaml>=6.0",
+    "networkx>=3.3",
+    "pandas>=2.2",
+    "pyarrow>=16.0",
+    "psycopg[binary]>=3.2",
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[project.scripts]
+etl = "etl.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["etl"]
+
+[tool.hatch.build]
+include = ["etl/config.yaml", "etl/fixtures/**"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

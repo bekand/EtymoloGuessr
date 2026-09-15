@@ -1,0 +1,22 @@
+{"term": "gift", "lang": "English", "reltype": "inherited_from", "related_term": "*giftiz", "related_lang": "Proto-Germanic"}
+{"term": "Gift", "lang": "German", "reltype": "inherited_from", "related_term": "*giftiz", "related_lang": "Proto-Germanic"}
+{"term": "deer", "lang": "English", "reltype": "inherited_from", "related_term": "dēor", "related_lang": "Old English"}
+{"term": "dēor", "lang": "Old English", "reltype": "inherited_from", "related_term": "*deuzą", "related_lang": "Proto-Germanic"}
+{"term": "Tier", "lang": "German", "reltype": "inherited_from", "related_term": "*deuzą", "related_lang": "Proto-Germanic"}
+{"term": "starve", "lang": "English", "reltype": "inherited_from", "related_term": "steorfan", "related_lang": "Old English"}
+{"term": "steorfan", "lang": "Old English", "reltype": "inherited_from", "related_term": "*sterbaną", "related_lang": "Proto-Germanic"}
+{"term": "sterben", "lang": "German", "reltype": "inherited_from", "related_term": "*sterbaną", "related_lang": "Proto-Germanic"}
+{"term": "knight", "lang": "English", "reltype": "inherited_from", "related_term": "cniht", "related_lang": "Old English"}
+{"term": "cniht", "lang": "Old English", "reltype": "inherited_from", "related_term": "*knehtaz", "related_lang": "Proto-Germanic"}
+{"term": "Knecht", "lang": "German", "reltype": "inherited_from", "related_term": "*knehtaz", "related_lang": "Proto-Germanic"}
+{"term": "hound", "lang": "English", "reltype": "inherited_from", "related_term": "*hundaz", "related_lang": "Proto-Germanic"}
+{"term": "Hund", "lang": "German", "reltype": "inherited_from", "related_term": "*hundaz", "related_lang": "Proto-Germanic"}
+{"term": "padre", "lang": "Spanish", "reltype": "inherited_from", "related_term": "pater", "related_lang": "Latin"}
+{"term": "padre", "lang": "Portuguese", "reltype": "inherited_from", "related_term": "pater", "related_lang": "Latin"}
+{"term": "patio", "lang": "English", "reltype": "borrowed_from", "related_term": "patio", "related_lang": "Spanish"}
+{"term": "window", "lang": "English", "reltype": "inherited_from", "related_term": "vindauga", "related_lang": "Old Norse"}
+{"term": "vindauga", "lang": "Old Norse", "reltype": "inherited_from", "related_term": "*windą", "related_lang": "Proto-Germanic"}
+{"term": "Wind", "lang": "German", "reltype": "inherited_from", "related_term": "*windą", "related_lang": "Proto-Germanic"}
+{"term": "junk compound", "lang": "English", "reltype": "inherited_from", "related_term": "foo", "related_lang": "Latin"}
+{"term": "-ness", "lang": "English", "reltype": "inherited_from", "related_term": "-nassu", "related_lang": "Old English"}
+{"term": "gift", "lang": "English", "reltype": "cognate_of", "related_term": "Gift", "related_lang": "German"}

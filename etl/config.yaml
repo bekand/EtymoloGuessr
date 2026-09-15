@@ -1,0 +1,139 @@
+# Leaf languages use Wiktionary English names; codes are used in lang_pair ids.
+leaf_languages:
+  English: en
+  Spanish: es
+  Portuguese: pt
+  German: de
+
+ancestor_languages:
+  - Latin
+  - Vulgar Latin
+  - Old Latin
+  - Old Spanish
+  - Old Galician-Portuguese
+  - Galician
+  - Old Portuguese
+  - Old French
+  - Middle French
+  - Anglo-Norman
+  - Old Occitan
+  - Gothic
+  - Old English
+  - Middle English
+  - Old High German
+  - Middle High German
+  - Old Saxon
+  - Middle Low German
+  - Old Dutch
+  - Middle Dutch
+  - Old Norse
+  - Old Frisian
+  - Proto-West Germanic
+  - Proto-Germanic
+  - Proto-Indo-European
+  - Proto-Italic
+  - Proto-Celtic
+  - Ancient Greek
+  - Byzantine Greek
+  - Arabic
+  - Classical Nahuatl
+  - Persian
+  - Middle Persian
+  - Sanskrit
+  - Frankish
+  - Medieval Latin
+  - Late Latin
+  - Proto-Indo-Iranian
+
+keep_reltypes:
+  - inherited_from
+  - borrowed_from
+  - derived_from
+  - root
+  - cognate_of
+  - doublet_with
+
+ancestor_reltypes:
+  - inherited_from
+  - borrowed_from
+  - derived_from
+  - root
+
+generate:
+  n: 50
+  min_quality: 2
+  min_nodes: 3
+  max_nodes: 5
+  max_ancestor_depth: 6
+  max_gloss_overlap: 0.5
+  n_choices: 4
+  seed: 42
+
+sources:
+  etymology:
+    name: etymology.parquet
+    url: https://github.com/droher/etymology-db/releases/download/2023-12/etymology.parquet
+    sha256: null
+    bytes_estimate: 140247040
+    license: CC BY-SA 3.0
+  glosses:
+    - name: kaikki-English.jsonl
+      url: https://kaikki.org/dictionary/English/kaikki.org-dictionary-English.jsonl
+      lang: English
+      sha256: null
+      bytes_estimate: 400000000
+    - name: kaikki-German.jsonl
+      url: https://kaikki.org/dictionary/German/kaikki.org-dictionary-German.jsonl
+      lang: German
+      sha256: null
+      bytes_estimate: 120000000
+    - name: kaikki-Spanish.jsonl
+      url: https://kaikki.org/dictionary/Spanish/kaikki.org-dictionary-Spanish.jsonl
+      lang: Spanish
+      sha256: null
+      bytes_estimate: 120000000
+    - name: kaikki-Portuguese.jsonl
+      url: https://kaikki.org/dictionary/Portuguese/kaikki.org-dictionary-Portuguese.jsonl
+      lang: Portuguese
+      sha256: null
+      bytes_estimate: 80000000
+    - name: kaikki-Latin.jsonl
+      url: https://kaikki.org/dictionary/Latin/kaikki.org-dictionary-Latin.jsonl
+      lang: Latin
+      sha256: null
+      bytes_estimate: 40000000
+    - name: kaikki-Old-English.jsonl
+      url: https://kaikki.org/dictionary/Old%20English/kaikki.org-dictionary-Old%20English.jsonl
+      lang: Old English
+      sha256: null
+      bytes_estimate: 15000000
+    - name: kaikki-Old-High-German.jsonl
+      url: https://kaikki.org/dictionary/Old%20High%20German/kaikki.org-dictionary-Old%20High%20German.jsonl
+      lang: Old High German
+      sha256: null
+      bytes_estimate: 8000000
+    - name: kaikki-Old-French.jsonl
+      url: https://kaikki.org/dictionary/Old%20French/kaikki.org-dictionary-Old%20French.jsonl
+      lang: Old French
+      sha256: null
+      bytes_estimate: 15000000
+    - name: kaikki-Old-Norse.jsonl
+      url: https://kaikki.org/dictionary/Old%20Norse/kaikki.org-dictionary-Old%20Norse.jsonl
+      lang: Old Norse
+      sha256: null
+      bytes_estimate: 10000000
+    - name: kaikki-Arabic.jsonl
+      url: https://kaikki.org/dictionary/Arabic/kaikki.org-dictionary-Arabic.jsonl
+      lang: Arabic
+      sha256: null
+      bytes_estimate: 80000000
+    - name: kaikki-Proto-Germanic.jsonl
+      url: https://kaikki.org/dictionary/Proto-Germanic/kaikki.org-dictionary-Proto-Germanic.jsonl
+      lang: Proto-Germanic
+      sha256: null
+      bytes_estimate: 8000000
+    - name: kaikki-Proto-Indo-European.jsonl
+      url: https://kaikki.org/dictionary/Proto-Indo-European/kaikki.org-dictionary-Proto-Indo-European.jsonl
+      lang: Proto-Indo-European
+      sha256: null
+      bytes_estimate: 8000000
