@@ -37,6 +37,30 @@ STOPWORDS = {
 }
 MIN_TOKEN_LENGTH = 2
 
+# Orthographies where an initial capital marks a proper noun (not German, which
+# capitalizes all nouns). Applied only to modern leaf languages in this set.
+_PROPER_NOUN_CASE_LANGS = frozenset({"English", "Spanish", "Portuguese"})
+
+
+def is_proper_noun_leaf(lang: str, term: str) -> bool:
+    """True when a leaf term looks like a proper noun (initial uppercase letter).
+
+    For English / Spanish / Portuguese, Wiktionary lemmas for common words are
+    lowercase, so an initial capital is treated as a proper noun and rejected.
+    German is exempt: common nouns are capitalized in that orthography.
+    """
+    if lang not in _PROPER_NOUN_CASE_LANGS:
+        return False
+    for ch in term:
+        if ch.isalpha():
+            return ch.isupper()
+    return False
+
+
+def leaf_reuse_key(lang: str, term: str) -> str:
+    """Identity for leaf-reuse dedup within a generate batch (lang + term)."""
+    return f"{lang}\t{term}"
+
 
 def tokenize(text: str | None) -> set[str]:
     if not text:
@@ -128,10 +152,10 @@ def quality_score(
     lca_is_modern: bool,
     min_nodes: int = 3,
 ) -> int:
-    """Integer 0-5. Cross-language pairs cannot fall below 1."""
+    """Integer 0-5. Same-language pairs are heavily down-ranked (−3)."""
     score = 5
     if lang_a == lang_b:
-        score -= 2
+        score -= 3
     if {lang_a, lang_b} == {"Spanish", "Portuguese"}:
         score -= 1
     if lca_is_modern:
@@ -140,7 +164,7 @@ def quality_score(
         score -= 1
     if n_nodes <= min_nodes:
         score -= 1
-    return score
+    return max(0, score)
 
 
 class Funnel:
@@ -238,6 +262,9 @@ def extract_candidates(
     for n in leaves:
         lang = g.nodes[n]["lang"]
         term = g.nodes[n]["term"]
+        if is_proper_noun_leaf(lang, term):
+            funnel.bump("proper_noun_leaf")
+            continue
         gloss = gloss_for(glosses, lang, term)
         if not gloss:
             funnel.bump("no_gloss_leaf")
@@ -382,24 +409,23 @@ def make_choices(
     distractor_pool: list[str],
     n_choices: int,
     rng,
-) -> tuple[list[dict[str, Any]], str]:
+) -> tuple[list[dict[str, Any]], str] | None:
+    """Build MC choices from real distractor glosses, or None if the pool is too thin.
+
+    Does not invent placeholder senses. Callers must reject the candidate when
+    this returns None (funnel: insufficient_distractors).
+    """
+    need = n_choices - 1
     unique: list[str] = []
-    for g in distractor_pool:
-        if g == correct_gloss:
+    for gloss in distractor_pool:
+        if gloss == correct_gloss:
             continue
-        if g not in unique:
-            unique.append(g)
+        if gloss not in unique:
+            unique.append(gloss)
+    if len(unique) < need:
+        return None
     rng.shuffle(unique)
-    picked = unique[: n_choices - 1]
-    used_glosses = {correct_gloss, *picked}
-    while len(picked) < n_choices - 1:
-        placeholder_number = len(picked) + 1
-        placeholder = f"(unrelated) sense {placeholder_number}"
-        while placeholder in used_glosses:
-            placeholder_number += 1
-            placeholder = f"(unrelated) sense {placeholder_number}"
-        picked.append(placeholder)
-        used_glosses.add(placeholder)
+    picked = unique[:need]
     options = [correct_gloss] + picked
     rng.shuffle(options)
     choices = [{"id": f"c{i}", "gloss": gloss} for i, gloss in enumerate(options)]
@@ -483,11 +509,13 @@ def generate_puzzles(
     funnel.bump("graph_edges", g.number_of_edges())
     timer.stage("build graph", f"{g.number_of_nodes()} nodes / {g.number_of_edges()} edges")
 
-    # When n > 0, stop once we have enough quality survivors. Oversample a little so
-    # post-filters (lang_pair) and quality sort still have headroom.
+    # When n > 0, stop once we have enough quality survivors. Oversample so
+    # lang_pair / leaf-reuse / distractor filters still have headroom, and so the
+    # distractor pool (built from all extracted LCA glosses) stays diverse.
     extract_limit: int | None = None
     if n and n > 0:
-        extract_limit = n * 3 if lang_pairs else n
+        # Need ≥ n_choices distinct LCA glosses in the pool; oversample for dedup.
+        extract_limit = max(n * 5, n_choices * 4) if lang_pairs else max(n * 4, n_choices * 4)
 
     candidates = extract_candidates(
         g,
@@ -511,14 +539,30 @@ def generate_puzzles(
     timer.stage("filter quality", f"{len(candidates)} left (min_quality={min_quality})")
 
     candidates.sort(key=lambda c: (-c["quality_score"], c["lang_pair"], c["leaf_a"]["term"], c["leaf_b"]["term"]))
-    if n and n > 0:
-        candidates = candidates[:n]
-    distractors = [c["lca"]["gloss"] for c in candidates if c["lca"].get("gloss")]
+
+    # Build distractors from the full quality-passing candidate set *before* leaf
+    # reuse / emit slicing. Slicing first (as in an earlier revision) left `--n`
+    # small batches with too few unique LCA glosses and forced placeholders.
+    distractor_pool = [c["lca"]["gloss"] for c in candidates if c["lca"].get("gloss")]
 
     puzzles: list[Puzzle] = []
+    used_leaves: set[str] = set()
     for cand in candidates:
-        choices, correct = make_choices(cand["lca"]["gloss"], distractors, n_choices, rng)
+        if n and n > 0 and len(puzzles) >= n:
+            break
+        key_a = leaf_reuse_key(cand["leaf_a"]["lang"], cand["leaf_a"]["term"])
+        key_b = leaf_reuse_key(cand["leaf_b"]["lang"], cand["leaf_b"]["term"])
+        if key_a in used_leaves or key_b in used_leaves:
+            funnel.bump("leaf_reuse")
+            continue
+        built = make_choices(cand["lca"]["gloss"], distractor_pool, n_choices, rng)
+        if built is None:
+            funnel.bump("insufficient_distractors")
+            continue
+        choices, correct = built
         puzzles.append(to_puzzle(cand, choices, correct, g))
+        used_leaves.add(key_a)
+        used_leaves.add(key_b)
         funnel.bump("emitted")
     timer.stage("emit puzzles", f"{len(puzzles)} puzzles")
 

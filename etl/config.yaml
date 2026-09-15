@@ -61,7 +61,7 @@ ancestor_reltypes:
 
 generate:
   n: 50
-  min_quality: 2
+  min_quality: 3
   min_nodes: 3
   max_nodes: 5
   max_ancestor_depth: 6
