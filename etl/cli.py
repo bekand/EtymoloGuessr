@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 import typer
+from typer import Context
 
 from etl.db import disable_puzzle, fetch_puzzles, truncate_puzzles, upsert_puzzles
 from etl.doctor import doctor_report, format_doctor
@@ -33,7 +34,12 @@ log = logging.getLogger(__name__)
 
 
 @app.callback()
-def main(verbose: bool = typer.Option(False, "--verbose", "-v")) -> None:
+def main(
+    ctx: Context,
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose logging / stage timings"),
+) -> None:
+    ctx.ensure_object(dict)
+    ctx.obj["verbose"] = verbose
     setup_logging(verbose)
 
 
@@ -50,6 +56,7 @@ def refresh(
 
 @app.command()
 def generate(
+    ctx: Context,
     n: int = typer.Option(None, "--n", help="Max puzzles to emit; 0 = all that pass filters"),
     seed: int = typer.Option(None, "--seed"),
     lang_pair: list[str] = typer.Option(None, "--lang-pair", help="Repeatable, e.g. en-de"),
@@ -63,19 +70,29 @@ def generate(
     ),
     db: bool = typer.Option(False, "--db", help="Upsert into Postgres"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Counts and funnel only, no write"),
+    verbose: bool = typer.Option(
+        False,
+        "--verbose",
+        "-v",
+        help="Print timed stage progress on stderr (load, graph, candidates, emit, write)",
+    ),
 ) -> None:
     """Extract puzzles from derived artifacts (does not download)."""
     sinks = sum([stdout, db, jsonl is not None])
     if sinks > 1:
         raise typer.BadParameter("choose one sink: --stdout, --jsonl, or --db")
 
+    verbose = verbose or bool((ctx.obj or {}).get("verbose"))
     puzzles, funnel = generate_puzzles(
         n=n,
         seed=seed,
         lang_pairs=list(lang_pair) if lang_pair else None,
         min_quality=min_quality,
+        verbose=verbose,
     )
     path = write_funnel(funnel, extra={"n_requested": n, "dry_run": dry_run})
+    if verbose:
+        typer.echo(f"[generate] write funnel: {path}", err=True)
     typer.echo(f"funnel: {funnel.as_dict()}", err=True)
     typer.echo(f"wrote {path}", err=True)
 
@@ -85,14 +102,20 @@ def generate(
 
     if stdout:
         typer.echo(puzzles_to_json(puzzles))
+        if verbose:
+            typer.echo(f"[generate] write stdout: {len(puzzles)} puzzles", err=True)
         return
     if db:
         count = upsert_puzzles(puzzles)
         typer.echo(f"upserted {count} puzzles")
+        if verbose:
+            typer.echo(f"[generate] write db: upserted {count}", err=True)
         return
     dest = jsonl or default_puzzles_jsonl()
     write_jsonl(puzzles, dest)
     typer.echo(f"wrote {len(puzzles)} puzzles to {dest}")
+    if verbose:
+        typer.echo(f"[generate] write jsonl: {dest}", err=True)
 
 
 @app.command()

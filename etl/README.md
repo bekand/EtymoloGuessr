@@ -99,6 +99,7 @@ uv run etl generate --dry-run                      # funnel only, no write
 uv run etl generate --stdout                       # JSON array on stdout
 uv run etl generate --jsonl path/to/puzzles.jsonl
 uv run etl generate --db                           # upsert into Postgres
+uv run etl generate -v --n 10                      # timed stage progress on stderr
 ```
 
 Flags:
@@ -111,10 +112,13 @@ Flags:
 | `--min-quality` | Drop candidates below this integer score (default `generate.min_quality`, currently 2) |
 | `--stdout` / `--jsonl PATH` / `--db` | Mutually exclusive sinks |
 | `--dry-run` | Print counts / write `data/reports/funnel.json` only |
+| `--verbose` / `-v` | Timed stage progress on stderr (load derived, build graph, candidates, emit, write). Also accepted as `etl -v generate …` |
 
 If you omit every sink, output is `data/puzzles/puzzles.jsonl`. Funnel counts always go to stderr and `data/reports/funnel.json`.
 
-Rejection reasons in the funnel include `no_gloss`, `too_big`, `too_small`, `same_meaning`, `no_lca`, `below_min_quality`.
+With `--n > 0`, candidate search **early-exits** once enough quality survivors are found (and only walks leaf pairs that share an ancestor). Use `--n 0` for a full pass. Early exit can change which top-N puzzles you get versus an exhaustive quality sort over every pair.
+
+Rejection reasons in the funnel include `no_gloss`, `too_big`, `too_small`, `same_meaning`, `no_lca`, `below_min_quality`, `early_exit`.
 
 ### `etl reset`
 

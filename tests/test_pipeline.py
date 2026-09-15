@@ -1,7 +1,17 @@
 from typing import Any, cast
 
+import pandas as pd
+
 from etl.derive import is_junk_term
-from etl.generate import gloss_overlap, make_choices, quality_score, still_same_meaning
+from etl.generate import (
+    Funnel,
+    build_graph,
+    extract_candidates,
+    gloss_overlap,
+    make_choices,
+    quality_score,
+    still_same_meaning,
+)
 from etl.ids import puzzle_id
 from etl.validate import validate_puzzles
 from etl.models import Puzzle
@@ -72,6 +82,89 @@ def test_make_choices_uses_unique_placeholders():
     glosses = [choice["gloss"] for choice in choices]
     assert len(glosses) == len(set(glosses))
     assert choices[[choice["id"] for choice in choices].index(correct_id)]["gloss"] == "ancestor gloss"
+
+
+def _synth_shift_graph(n_leaves: int, shared_ancestors: int = 20):
+    """Many modern leaves under proto ancestors with distinct glosses (semantic shift)."""
+    rows = []
+    glosses: dict[str, str] = {}
+    for i in range(shared_ancestors):
+        glosses[f"Proto-Germanic\t*root{i}"] = f"ancient sense {i} poison venom toxin"
+    for i in range(n_leaves):
+        leaf_lang = ["English", "German", "Spanish", "Portuguese"][i % 4]
+        term = f"word{i}"
+        anc = f"*root{i % shared_ancestors}"
+        rows.append(
+            dict(
+                term=term,
+                lang=leaf_lang,
+                reltype="inherited_from",
+                related_term=anc,
+                related_lang="Proto-Germanic",
+            )
+        )
+        glosses[f"{leaf_lang}\t{term}"] = f"unique leaf gloss {i} zebra{i} quartz{i}"
+    df = pd.DataFrame(rows)
+    g = build_graph(df, {"inherited_from", "borrowed_from", "derived_from", "root"})
+    cfg = {
+        "leaf_languages": {"English": "en", "Spanish": "es", "Portuguese": "pt", "German": "de"},
+        "ancestor_reltypes": ["inherited_from", "borrowed_from", "derived_from", "root"],
+        "generate": {
+            "min_nodes": 3,
+            "max_nodes": 5,
+            "max_ancestor_depth": 6,
+            "max_gloss_overlap": 0.5,
+            "n": 10,
+            "min_quality": 2,
+            "n_choices": 4,
+            "seed": 1,
+        },
+    }
+    return g, glosses, cfg
+
+
+def test_extract_candidates_early_exit_respects_limit():
+    g, glosses, cfg = _synth_shift_graph(400, shared_ancestors=10)
+    funnel = Funnel()
+    cands = extract_candidates(g, glosses, cfg, funnel, limit=10, min_quality=2)
+    assert len(cands) >= 10
+    assert sum(1 for c in cands if c["quality_score"] >= 2) >= 10
+    assert funnel.counts.get("early_exit", 0) == 1
+    # Without early exit this graph considers tens of thousands of related pairs.
+    assert funnel.counts["pairs_considered"] < 5000
+
+
+def test_extract_candidates_skips_unrelated_leaf_pairs():
+    """Leaves under disjoint ancestors must not inflate pairs_considered."""
+    rows = [
+        dict(term="a1", lang="English", reltype="inherited_from", related_term="*ra", related_lang="Proto-Germanic"),
+        dict(term="a2", lang="German", reltype="inherited_from", related_term="*ra", related_lang="Proto-Germanic"),
+        dict(term="b1", lang="Spanish", reltype="inherited_from", related_term="*rb", related_lang="Proto-Germanic"),
+        dict(term="b2", lang="Portuguese", reltype="inherited_from", related_term="*rb", related_lang="Proto-Germanic"),
+    ]
+    glosses = {
+        "English\ta1": "modern alpha one",
+        "German\ta2": "modern alpha two",
+        "Spanish\tb1": "modern beta one",
+        "Portuguese\tb2": "modern beta two",
+        "Proto-Germanic\t*ra": "ancient poison ra",
+        "Proto-Germanic\t*rb": "ancient venom rb",
+    }
+    g = build_graph(pd.DataFrame(rows), {"inherited_from"})
+    cfg = {
+        "leaf_languages": {"English": "en", "Spanish": "es", "Portuguese": "pt", "German": "de"},
+        "ancestor_reltypes": ["inherited_from"],
+        "generate": {
+            "min_nodes": 3,
+            "max_nodes": 5,
+            "max_ancestor_depth": 6,
+            "max_gloss_overlap": 0.5,
+        },
+    }
+    funnel = Funnel()
+    extract_candidates(g, glosses, cfg, funnel)
+    # Naive all-pairs would be C(4,2)=6; related-only is 2 (a1-a2 and b1-b2).
+    assert funnel.counts["pairs_considered"] == 2
 
 
 def test_validate_happy_path():
