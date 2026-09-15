@@ -34,7 +34,19 @@ Large dumps stay out of git. Pin URLs (and optional SHA-256) in `config.yaml`.
 
 The CLI never creates the `puzzles` table. Go owns migrations. ETL assumes the table already exists (`etl doctor` checks).
 
-Expected columns: `id`, `enabled`, `leaf_a`, `leaf_b`, `prompt_graph`, `answer_graph`, `choices`, `correct_choice`, `quality_score`, `lang_pair`, `source`. Upserts key on `id`.
+Expected columns: `id`, `enabled`, `leaf_a`, `leaf_b`, `answer_graph`, `choices`, `correct_choice`, `quality_score`, `lang_pair`, `source`. Upserts key on `id`.
+
+Canonical gold is **`answer_graph` only**. The player prompt is derived as `{nodes: answer_graph.nodes, edges: []}` (`etl.models.prompt_graph_from_answer`). JSONL no longer stores `prompt_graph`. Upserts still write a derived `prompt_graph` column for legacy Postgres schemas until Go migrations drop it; the future API should derive at serve time (hard mode may further strip ancestor labels).
+
+### Migration notes (`prompt_graph`)
+
+| Surface | Behavior |
+|---|---|
+| New JSONL / `to_dict()` | Omits `prompt_graph` |
+| Load / `from_dict()` | Accepts legacy rows if `prompt_graph` matches the derivation; rejects inconsistent duplicates |
+| Postgres upsert | Still populates `prompt_graph` as the derivation (compat) |
+| Validate | Checks `answer_graph` structure; does not require a stored prompt field |
+| Go API (planned) | `GET` builds prompt from gold; never send edges / `correct_choice` until solve |
 
 ## Data sources and license
 
@@ -188,7 +200,7 @@ uv run etl inspect --db <id>
 
 ### `etl validate`
 
-Schema-check a puzzle set. Failures include: not exactly 4 choices, duplicate ids, graph not 3–5 nodes, leaves missing from the graph, gold edges that reference unknown node ids, distractors equal to the correct gloss, prompt graph leaking gold edges.
+Schema-check a puzzle set. Failures include: not exactly 4 choices, duplicate ids, graph not 3–5 nodes, leaves missing from the graph, gold edges that reference unknown node ids, distractors equal to the correct gloss. Legacy rows that still include `prompt_graph` must match the derived view (same nodes, empty edges).
 
 ```bash
 uv run etl validate

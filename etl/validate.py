@@ -53,19 +53,13 @@ def validate_puzzle(p: Puzzle, errors: list[str], cfg: dict | None = None) -> No
     ):
         _err(errors, pid, "distractors must differ from the correct gloss")
 
-    prompt = p.prompt_graph or {}
     answer = p.answer_graph or {}
-    pnodes = prompt.get("nodes") or []
     anodes = answer.get("nodes") or []
     aedges = answer.get("edges") or []
     if not (min_nodes <= len(anodes) <= max_nodes):
         _err(errors, pid, f"answer graph must have {min_nodes}-{max_nodes} nodes, got {len(anodes)}")
     node_ids = {n.get("id") for n in anodes if isinstance(n, dict)}
-    prompt_ids = {n.get("id") for n in pnodes if isinstance(n, dict)}
-    if node_ids != prompt_ids:
-        _err(errors, pid, "prompt_graph nodes must match answer_graph nodes")
-    if prompt.get("edges"):
-        _err(errors, pid, "prompt_graph must not include gold edges")
+    # prompt_graph is derived at serve/emit time (same nodes, empty edges).
 
     leaf_ids = {
         f"{p.leaf_a.get('lang')}:{p.leaf_a.get('term')}",

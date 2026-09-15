@@ -138,8 +138,8 @@ NetworkX (or similar): node = `(lang, term)`. Walk from modern leaves toward anc
 
 Pregenerated puzzles, not the full 4M-edge dump.
 
-- `puzzles`: `id` (content hash), `enabled` (default true), one row usable as both modes, `leaf_a`/`leaf_b`, `prompt_graph`, `answer_graph`, `choices`, `correct_choice`, `quality_score`, `lang_pair`, `source`.
-- Hard mode can reuse the same `answer_graph`; API strips edges (and maybe ancestor labels) depending on mode.
+- `puzzles`: `id` (content hash), `enabled` (default true), one row usable as both modes, `leaf_a`/`leaf_b`, `answer_graph` (gold; prompt derived at serve time), `choices`, `correct_choice`, `quality_score`, `lang_pair`, `source`.
+- Hard mode can reuse the same `answer_graph`; API strips edges (and maybe ancestor labels) depending on mode. Do not duplicate gold as a stored `prompt_graph`.
 - Empty `users` / `scores` tables only if you want migrations ready; no auth in v1.
 
 ## Backend: Go (not Python)
