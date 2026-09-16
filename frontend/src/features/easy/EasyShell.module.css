@@ -83,10 +83,10 @@
 
 .playRow {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: flex-end;
+  flex-direction: column;
+  align-items: center;
   gap: var(--space-5);
+  width: 100%;
 }
 
 .choices {
@@ -116,17 +116,16 @@
 .submit {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: flex-end;
+  align-items: flex-end;
   gap: var(--space-3);
-  padding-bottom: var(--space-1);
-  flex-shrink: 0;
+  width: min(100%, calc(21rem + var(--space-3)));
+  padding-top: var(--space-1);
 }
 
 .waitNote {
   margin: 0;
-  max-width: 14ch;
-  text-align: center;
+  max-width: 22ch;
+  text-align: right;
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   letter-spacing: 0.03em;
@@ -144,20 +143,8 @@
     justify-self: start;
   }
 
-  .playRow {
-    flex-direction: column;
-    align-items: center;
-  }
-
   .submit {
-    flex-direction: row;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-4);
-  }
-
-  .waitNote {
-    text-align: left;
-    max-width: 18ch;
+    width: 100%;
+    max-width: calc(21rem + var(--space-3));
   }
 }
