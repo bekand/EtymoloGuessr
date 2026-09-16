@@ -3,7 +3,7 @@ from typing import Any, cast
 import pandas as pd
 import pytest
 
-from etl.derive import is_junk_term
+from etl.derive import first_gloss, is_junk_term
 from etl.generate import (
     Funnel,
     build_graph,
@@ -20,6 +20,75 @@ from etl.generate import (
 from etl.ids import puzzle_id
 from etl.validate import validate_puzzles
 from etl.models import Puzzle
+
+
+def test_first_gloss_joins_colon_qualifier():
+    assert first_gloss(
+        {
+            "senses": [
+                {
+                    "glosses": [
+                        "Of a person:",
+                        "Complacent, self-satisfied, smug.",
+                    ]
+                }
+            ]
+        }
+    ) == "Of a person: Complacent, self-satisfied, smug."
+    assert (
+        first_gloss({"senses": [{"glosses": ["noble or divine woman :", "goddess"]}]})
+        == "noble or divine woman : goddess"
+    )
+
+
+def test_first_gloss_keeps_single_complete_string():
+    assert first_gloss({"senses": [{"glosses": ["a present given to someone"]}]}) == (
+        "a present given to someone"
+    )
+    assert first_gloss({"senses": [{"glosses": ["a dog", "a hound"]}]}) == "a dog"
+
+
+def test_first_gloss_skips_inflection_senses():
+    inflection = {
+        "glosses": ["inflection of dō:", "present active infinitive"],
+        "form_of": [{"word": "dō"}],
+    }
+    assert first_gloss({"senses": [inflection]}) is None
+    assert first_gloss(
+        {"senses": [{"glosses": ["Inflection of ābīdan:", "first-person singular present indicative"]}]}
+    ) is None
+    assert (
+        first_gloss(
+            {
+                "senses": [
+                    inflection,
+                    {"glosses": ["to give"]},
+                ]
+            }
+        )
+        == "to give"
+    )
+    assert (
+        first_gloss(
+            {
+                "senses": [
+                    {
+                        "glosses": ["alternative form of foo"],
+                        "form_of": [{"word": "foo"}],
+                    },
+                    {"glosses": ["a courtyard"]},
+                ]
+            }
+        )
+        == "a courtyard"
+    )
+
+
+def test_first_gloss_empty_or_missing_senses():
+    assert first_gloss({}) is None
+    assert first_gloss({"senses": []}) is None
+    assert first_gloss({"senses": [{"glosses": []}]}) is None
+    assert first_gloss({"senses": [{"glosses": ["  "]}]}) is None
 
 
 def test_junk_terms():

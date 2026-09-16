@@ -85,13 +85,30 @@ def reduce_edges(df: pd.DataFrame, cfg: dict[str, Any] | None = None) -> pd.Data
     return out.reset_index(drop=True)
 
 
+def _sense_gloss_parts(sense: dict[str, Any]) -> list[str]:
+    raw = sense.get("glosses") or sense.get("raw_glosses") or []
+    parts: list[str] = []
+    for item in raw:
+        g = str(item).strip()
+        if g:
+            parts.append(g)
+    return parts
+
+
+def _is_inflection_sense(sense: dict[str, Any], parts: list[str]) -> bool:
+    if sense.get("form_of"):
+        return True
+    return bool(parts) and parts[0].casefold().startswith("inflection of")
+
+
 def first_gloss(obj: dict[str, Any]) -> str | None:
     for sense in obj.get("senses") or []:
-        glosses = sense.get("glosses") or sense.get("raw_glosses") or []
-        if glosses:
-            g = str(glosses[0]).strip()
-            if g:
-                return g
+        parts = _sense_gloss_parts(sense)
+        if not parts or _is_inflection_sense(sense, parts):
+            continue
+        if parts[0].endswith(":") and len(parts) > 1:
+            return " ".join(parts)
+        return parts[0]
     return None
 
 
