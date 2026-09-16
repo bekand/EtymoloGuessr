@@ -1,0 +1,22 @@
+.colophon {
+  margin-top: auto;
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--rule);
+  font-family: var(--font-serif);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--ink-faint);
+}
+
+.line {
+  margin: 0 0 var(--space-1);
+}
+
+.line a {
+  color: var(--ink-muted);
+  text-underline-offset: 2px;
+}
+
+.line a:hover {
+  color: var(--stamp-red);
+}
