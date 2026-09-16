@@ -66,14 +66,149 @@ export function EasyMode({ onBack }: EasyModeProps) {
         ? solveMutation.error.message
         : 'Could not submit that answer.')
       : selectedId
-        ? 'Stamp when you are sure.'
-        : 'Pick a meaning, then stamp.'
+        ? 'Submit when you are sure.'
+        : 'Pick a meaning, then submit.'
 
   function handleNext() {
     setGradedPuzzle(undefined)
     setSelectedId(null)
     setExplainOpen(null)
     solveMutation.reset()
+  }
+
+  function renderPrompt() {
+    return (
+      <section className="prompt" aria-label="Word pair">
+        <p className="instruction">
+          What meaning do these words share in their common ancestor?
+        </p>
+        <div className="cards">
+          <IndexCard
+            key={`${puzzle?.id ?? 'loading'}-a`}
+            placeholder={loading}
+            lang={puzzle?.leafA.lang ?? '—'}
+            term={puzzle?.leafA.term}
+            gloss={puzzle?.leafA.gloss ?? undefined}
+            explainSide="left"
+            explainOpen={explainOpen === 'left'}
+            onExplainOpenChange={(open) => setExplainOpen(open ? 'left' : null)}
+          />
+          <span className="ampersand" aria-hidden="true">
+            &amp;
+          </span>
+          <IndexCard
+            key={`${puzzle?.id ?? 'loading'}-b`}
+            placeholder={loading}
+            lang={puzzle?.leafB.lang ?? '—'}
+            term={puzzle?.leafB.term}
+            gloss={puzzle?.leafB.gloss ?? undefined}
+            explainSide="right"
+            explainOpen={explainOpen === 'right'}
+            onExplainOpenChange={(open) => setExplainOpen(open ? 'right' : null)}
+          />
+        </div>
+      </section>
+    )
+  }
+
+  function renderReveal() {
+    return (
+      <section className="reveal" aria-live="polite">
+        {solved ? (
+          <p className={`verdict ${solveMutation.data?.correct ? 'ok' : 'no'}`}>
+            {solveMutation.data?.correct
+              ? 'Correct! '
+              : "Unfortunately, that's not correct..."}
+          </p>
+        ) : (
+          <p className="verdict pending">Checking the archive…</p>
+        )}
+        {solveMutation.data?.goldGraph ? (
+          <EtymologyGraph
+            graph={solveMutation.data.goldGraph}
+            leafA={puzzle?.leafA}
+            leafB={puzzle?.leafB}
+          />
+        ) : (
+          <div className="graphPlaceholder" aria-busy="true" />
+        )}
+        {solved ? (
+          <div className="nextRow">
+            <Stamp onClick={handleNext} aria-label="Load the next puzzle">
+              Next
+            </Stamp>
+          </div>
+        ) : null}
+      </section>
+    )
+  }
+
+  function renderChoices() {
+    return (
+      <section className="choices" aria-label="Meaning choices">
+        <p className="sectionLabel">Choose one</p>
+        <div className="notes">
+          {choices.map((choice, index) => {
+            const marker = CHOICE_MARKERS[index] ?? String(index + 1)
+            const tone = choiceTones[index % choiceTones.length]
+            return (
+              <PostIt
+                key={choice?.id ?? marker}
+                tone={tone}
+                marker={marker}
+                placeholder={!choice}
+                disabled={!choice}
+                selected={Boolean(choice && selectedId === choice.id)}
+                aria-label={choice ? `Choice ${marker}: ${choice.gloss}` : `Choice ${marker}`}
+                onClick={() => {
+                  if (choice) {
+                    setSelectedId(choice.id)
+                  }
+                }}
+              >
+                {choice?.gloss}
+              </PostIt>
+            )
+          })}
+        </div>
+      </section>
+    )
+  }
+
+  function renderSubmit() {
+    return (
+      <section className="submit" aria-label="Submit area">
+        {loadError ? (
+          <Stamp
+            hint={stampHint}
+            hintPlacement="right"
+            onClick={() => {
+              void puzzleQuery.refetch()
+            }}
+            aria-label="Retry loading a puzzle"
+          >
+            Retry
+          </Stamp>
+        ) : (
+          <Stamp
+            hint={stampHint}
+            hintPlacement="right"
+            disabled={!puzzle || !selectedId || solveMutation.isPending}
+            aria-label="Submit answer"
+            onClick={() => {
+              if (!puzzle || !selectedId) {
+                return
+              }
+              setGradedPuzzle(puzzle)
+              setExplainOpen(null)
+              solveMutation.mutate({ id: puzzle.id, choiceId: selectedId })
+            }}
+          >
+            Submit
+          </Stamp>
+        )}
+      </section>
+    )
   }
 
   return (
@@ -86,128 +221,12 @@ export function EasyMode({ onBack }: EasyModeProps) {
         <p className="mode">Easy</p>
       </header>
 
-      {revealing ? null : (
-        <section className="prompt" aria-label="Word pair">
-          <p className="instruction">
-            What meaning do these words share in their common ancestor?
-          </p>
-          <div className="cards">
-            <IndexCard
-              key={`${puzzle?.id ?? 'loading'}-a`}
-              placeholder={loading}
-              lang={puzzle?.leafA.lang ?? '—'}
-              term={puzzle?.leafA.term}
-              gloss={puzzle?.leafA.gloss ?? undefined}
-              explainSide="left"
-              explainOpen={explainOpen === 'left'}
-              onExplainOpenChange={(open) => setExplainOpen(open ? 'left' : null)}
-            />
-            <span className="ampersand" aria-hidden="true">
-              &amp;
-            </span>
-            <IndexCard
-              key={`${puzzle?.id ?? 'loading'}-b`}
-              placeholder={loading}
-              lang={puzzle?.leafB.lang ?? '—'}
-              term={puzzle?.leafB.term}
-              gloss={puzzle?.leafB.gloss ?? undefined}
-              explainSide="right"
-              explainOpen={explainOpen === 'right'}
-              onExplainOpenChange={(open) => setExplainOpen(open ? 'right' : null)}
-            />
-          </div>
-        </section>
-      )}
+      {revealing ? null : renderPrompt()}
 
-      {revealing ? (
-        <section className="reveal" aria-live="polite">
-          {solved ? (
-            <p className={`verdict ${solveMutation.data?.correct ? 'ok' : 'no'}`}>
-              {solveMutation.data?.correct
-                ? 'Correct! '
-                : "Unfortunately, that's not correct..."}
-            </p>
-          ) : (
-            <p className="verdict pending">Checking the archive…</p>
-          )}
-          {solveMutation.data?.goldGraph ? (
-            <EtymologyGraph
-              graph={solveMutation.data.goldGraph}
-              leafA={puzzle?.leafA}
-              leafB={puzzle?.leafB}
-            />
-          ) : (
-            <div className="graphPlaceholder" aria-busy="true" />
-          )}
-          {solved ? (
-            <div className="nextRow">
-              <Stamp onClick={handleNext} aria-label="Load the next puzzle">
-                Next
-              </Stamp>
-            </div>
-          ) : null}
-        </section>
-      ) : (
+      {revealing ? renderReveal() : (
         <div className="playRow">
-          <section className="choices" aria-label="Meaning choices">
-            <p className="sectionLabel">Choose one</p>
-            <div className="notes">
-              {choices.map((choice, index) => {
-                const marker = CHOICE_MARKERS[index] ?? String(index + 1)
-                const tone = choiceTones[index % choiceTones.length]
-                return (
-                  <PostIt
-                    key={choice?.id ?? marker}
-                    tone={tone}
-                    marker={marker}
-                    placeholder={!choice}
-                    disabled={!choice}
-                    selected={Boolean(choice && selectedId === choice.id)}
-                    aria-label={choice ? `Choice ${marker}: ${choice.gloss}` : `Choice ${marker}`}
-                    onClick={() => {
-                      if (choice) {
-                        setSelectedId(choice.id)
-                      }
-                    }}
-                  >
-                    {choice?.gloss}
-                  </PostIt>
-                )
-              })}
-            </div>
-          </section>
-
-          <section className="submit" aria-label="Submit area">
-            {loadError ? (
-              <Stamp
-                hint={stampHint}
-                hintPlacement="right"
-                onClick={() => {
-                  void puzzleQuery.refetch()
-                }}
-                aria-label="Retry loading a puzzle"
-              >
-                Retry
-              </Stamp>
-            ) : (
-              <Stamp
-                hint={stampHint}
-                hintPlacement="right"
-                disabled={!puzzle || !selectedId || solveMutation.isPending}
-                aria-label="Submit answer"
-                onClick={() => {
-                  if (!puzzle || !selectedId) {
-                    return
-                  }
-                  setGradedPuzzle(puzzle)
-                  setExplainOpen(null)
-                  solveMutation.mutate({ id: puzzle.id, choiceId: selectedId })
-                }}
-              >
-                Submit
-              </Stamp>
-            )}
-          </section>
+          {renderChoices()}
+          {renderSubmit()}
         </div>
       )}
 

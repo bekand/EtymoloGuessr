@@ -6,28 +6,36 @@
   .meaning {
     flex: 0 0 auto;
     max-width: 0;
+    max-height: 0;
     margin: 0;
     overflow: hidden;
     opacity: 0;
     pointer-events: none;
     transition:
       max-width var(--duration-med) var(--ease-paper),
+      max-height var(--duration-med) var(--ease-paper),
       margin var(--duration-med) var(--ease-paper),
       opacity var(--duration-med) var(--ease-paper);
   }
 
   .meaningText {
     margin: 0;
-    width: 16ch;
+    width: 20ch;
+    max-height: 8.5rem;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: var(--space-1);
     font-family: var(--font-serif);
     font-size: var(--text-sm);
     font-style: italic;
     line-height: 1.4;
     color: var(--ink-muted);
+    scrollbar-width: thin;
   }
 
   .meaning.open {
-    max-width: 16ch;
+    max-width: 18ch;
+    max-height: 8.5rem;
     opacity: 1;
     pointer-events: auto;
   }
@@ -54,7 +62,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  width: 14rem;
+  width: 15rem;
   min-height: 7.5rem;
   padding: var(--space-4) var(--space-4) var(--space-5);
   background: var(--paper-ruled);

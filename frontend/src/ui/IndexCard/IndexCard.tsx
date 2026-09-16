@@ -1,4 +1,5 @@
 import { useId, useState, type ReactNode } from 'react'
+import { joinClasses } from '@/utils/joinClasses'
 import './IndexCard.scss'
 
 type ExplainSide = 'left' | 'right'
@@ -31,7 +32,7 @@ export function IndexCard({
   const hasGloss = Boolean(gloss) && !placeholder
   const controlled = explainOpen !== undefined
   const open = hasGloss && (controlled ? explainOpen : uncontrolledOpen)
-  const classes = ['indexCard', placeholder && 'placeholder', className].filter(Boolean).join(' ')
+  const classes = joinClasses('indexCard', placeholder && 'placeholder', className)
   const explainLabel = explainSide === 'left' ? '< Explain' : 'Explain >'
 
   function toggleExplain() {
@@ -68,11 +69,7 @@ export function IndexCard({
   )
 
   const meaning = hasGloss ? (
-    <div
-      id={meaningId}
-      className={['meaning', open && 'open'].filter(Boolean).join(' ')}
-      aria-hidden={!open}
-    >
+    <div id={meaningId} className={joinClasses('meaning', open && 'open')} aria-hidden={!open}>
       <p className="meaningText">{gloss}</p>
     </div>
   ) : null

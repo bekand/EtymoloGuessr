@@ -18,7 +18,7 @@ function nodeKey(term: Term): string {
   return `${term.lang}:${term.term}`
 }
 
-function longestPathFromLeaves(graph: Graph): Map<string, number> {
+function buildRankState(graph: Graph): { ids: Set<string>; outgoing: Map<string, string[]>; incomingCount: Map<string, number> } {
   const ids = new Set(graph.nodes.map((node) => node.id))
   const outgoing = new Map<string, string[]>()
   const incomingCount = new Map<string, number>()
@@ -32,12 +32,19 @@ function longestPathFromLeaves(graph: Graph): Map<string, number> {
     if (!ids.has(edge.from) || !ids.has(edge.to)) {
       continue
     }
+
     outgoing.get(edge.from)?.push(edge.to)
     incomingCount.set(edge.to, (incomingCount.get(edge.to) ?? 0) + 1)
   }
 
+  return { ids, outgoing, incomingCount }
+}
+
+function longestPathFromLeaves(graph: Graph): Map<string, number> {
+  const { ids, outgoing, incomingCount } = buildRankState(graph)
   const rank = new Map<string, number>()
   const queue: string[] = []
+
   for (const id of ids) {
     if ((incomingCount.get(id) ?? 0) === 0) {
       rank.set(id, 0)
@@ -57,12 +64,13 @@ function longestPathFromLeaves(graph: Graph): Map<string, number> {
     if (!id) {
       break
     }
+
     const nextRank = (rank.get(id) ?? 0) + 1
-    for (const to of outgoing.get(id) ?? []) {
-      rank.set(to, Math.max(rank.get(to) ?? 0, nextRank))
-      incomingCount.set(to, (incomingCount.get(to) ?? 1) - 1)
-      if ((incomingCount.get(to) ?? 0) === 0) {
-        queue.push(to)
+    for (const target of outgoing.get(id) ?? []) {
+      rank.set(target, Math.max(rank.get(target) ?? 0, nextRank))
+      incomingCount.set(target, (incomingCount.get(target) ?? 1) - 1)
+      if ((incomingCount.get(target) ?? 0) === 0) {
+        queue.push(target)
       }
     }
   }
@@ -79,6 +87,7 @@ function longestPathFromLeaves(graph: Graph): Map<string, number> {
 function sortLeaves(nodes: GraphNode[], leafA?: Term, leafB?: Term): GraphNode[] {
   const aId = leafA ? nodeKey(leafA) : undefined
   const bId = leafB ? nodeKey(leafB) : undefined
+
   return [...nodes].sort((left, right) => {
     if (left.id === aId) {
       return -1
@@ -96,13 +105,7 @@ function sortLeaves(nodes: GraphNode[], leafA?: Term, leafB?: Term): GraphNode[]
   })
 }
 
-export function layoutEtymologyGraph(
-  graph: Graph,
-  leafA?: Term,
-  leafB?: Term,
-): { nodes: Node<EtymologyNodeData, 'etymology'>[]; edges: Edge[] } {
-  const ranks = longestPathFromLeaves(graph)
-  const maxRank = Math.max(0, ...ranks.values())
+function groupNodesByRank(graph: Graph, ranks: Map<string, number>): Map<number, GraphNode[]> {
   const byRank = new Map<number, GraphNode[]>()
 
   for (const node of graph.nodes) {
@@ -112,48 +115,83 @@ export function layoutEtymologyGraph(
     byRank.set(rank, bucket)
   }
 
+  return byRank
+}
+
+function positionLeafLayer(
+  layer: GraphNode[],
+  xOf: Map<string, number>,
+  leafA?: Term,
+  leafB?: Term,
+): void {
+  const ordered = sortLeaves(layer, leafA, leafB)
+
+  ordered.forEach((node, index) => {
+    xOf.set(node.id, PAD + index * (NODE_WIDTH + H_GAP))
+  })
+}
+
+function positionInnerLayer(layer: GraphNode[], graph: Graph, xOf: Map<string, number>): void {
+  const ordered = [...layer].sort((a, b) => a.id.localeCompare(b.id))
+
+  ordered.forEach((node) => {
+    const childXs = graph.edges
+      .filter((edge) => edge.to === node.id)
+      .map((edge) => xOf.get(edge.from))
+      .filter((value): value is number => value !== undefined)
+
+    xOf.set(
+      node.id,
+      childXs.length > 0 ? childXs.reduce((sum, value) => sum + value, 0) / childXs.length : PAD,
+    )
+  })
+
+  const sorted = [...ordered].sort((a, b) => (xOf.get(a.id) ?? 0) - (xOf.get(b.id) ?? 0))
+  let cursor = PAD
+
+  for (const node of sorted) {
+    const next = Math.max(xOf.get(node.id) ?? cursor, cursor)
+    xOf.set(node.id, next)
+    cursor = next + NODE_WIDTH + H_GAP
+  }
+}
+
+function normalizeXPositions(xOf: Map<string, number>): void {
+  const xValues = [...xOf.values()]
+  const minX = xValues.length ? Math.min(...xValues) : 0
+
+  for (const [id, x] of xOf) {
+    xOf.set(id, x - minX + PAD)
+  }
+}
+
+export function layoutEtymologyGraph(
+  graph: Graph,
+  leafA?: Term,
+  leafB?: Term,
+): { nodes: Node<EtymologyNodeData, 'etymology'>[]; edges: Edge[] } {
+  const ranks = longestPathFromLeaves(graph)
+  const maxRank = Math.max(0, ...ranks.values())
+  const byRank = groupNodesByRank(graph, ranks)
   const xOf = new Map<string, number>()
   const yOf = new Map<string, number>()
 
   for (let rank = 0; rank <= maxRank; rank++) {
     const layer = byRank.get(rank) ?? []
-    const ordered = rank === 0 ? sortLeaves(layer, leafA, leafB) : [...layer].sort((a, b) => a.id.localeCompare(b.id))
 
     if (rank === 0) {
-      ordered.forEach((node, index) => {
-        xOf.set(node.id, PAD + index * (NODE_WIDTH + H_GAP))
-      })
+      positionLeafLayer(layer, xOf, leafA, leafB)
     } else {
-      ordered.forEach((node) => {
-        const childXs = graph.edges
-          .filter((edge) => edge.to === node.id)
-          .map((edge) => xOf.get(edge.from))
-          .filter((value): value is number => value !== undefined)
-        xOf.set(
-          node.id,
-          childXs.length > 0 ? childXs.reduce((sum, value) => sum + value, 0) / childXs.length : PAD,
-        )
-      })
-      const sorted = [...ordered].sort((a, b) => (xOf.get(a.id) ?? 0) - (xOf.get(b.id) ?? 0))
-      let cursor = PAD
-      for (const node of sorted) {
-        const next = Math.max(xOf.get(node.id) ?? cursor, cursor)
-        xOf.set(node.id, next)
-        cursor = next + NODE_WIDTH + H_GAP
-      }
+      positionInnerLayer(layer, graph, xOf)
     }
 
     const y = PAD + (maxRank - rank) * (NODE_HEIGHT + V_GAP)
-    for (const node of ordered) {
+    for (const node of layer) {
       yOf.set(node.id, y)
     }
   }
 
-  const xs = [...xOf.values()]
-  const minX = xs.length ? Math.min(...xs) : 0
-  for (const [id, x] of xOf) {
-    xOf.set(id, x - minX + PAD)
-  }
+  normalizeXPositions(xOf)
 
   const nodes: Node<EtymologyNodeData, 'etymology'>[] = graph.nodes.map((node) => ({
     id: node.id,
