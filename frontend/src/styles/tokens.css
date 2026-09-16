@@ -47,8 +47,8 @@
   --stack-offset: 2px;
   --tilt-soft: -0.6deg;
   --tilt-alt: 0.8deg;
-  --stamp-tilt: -1.5deg;
-  --stamp-tilt-hover: -3.5deg;
+  --stamp-tilt: -2.25deg;
+  --stamp-tilt-hover: -4.5deg;
 
   --ease-paper: cubic-bezier(0.22, 1, 0.36, 1);
   --duration-fast: 160ms;

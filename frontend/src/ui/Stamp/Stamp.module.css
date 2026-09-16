@@ -10,6 +10,7 @@
   cursor: pointer;
   color: var(--stamp-red);
   transform: rotate(var(--stamp-tilt));
+  mix-blend-mode: multiply;
   transition:
     transform var(--duration-med) var(--ease-paper),
     filter var(--duration-fast) var(--ease-paper),
@@ -17,20 +18,21 @@
 }
 
 .stamp:hover:not(:disabled) {
-  transform: rotate(var(--stamp-tilt-hover)) translateY(-4px) scale(1.06);
-  filter: drop-shadow(3px 5px 0 rgba(16, 14, 12, 0.12));
+  transform: rotate(var(--stamp-tilt-hover)) translateY(-5px) scale(1.07);
+  filter: drop-shadow(4px 6px 0 rgba(16, 14, 12, 0.14));
 }
 
 .stamp:active:not(:disabled) {
-  transform: rotate(0.4deg) translateY(3px) scale(0.96);
+  transform: rotate(0.6deg) translateY(4px) scale(0.94);
   filter: drop-shadow(0 0 0 transparent);
   transition-duration: 80ms;
 }
 
 .stamp:disabled {
-  opacity: 0.38;
+  opacity: 0.34;
   cursor: not-allowed;
-  filter: grayscale(0.15);
+  filter: grayscale(0.2);
+  mix-blend-mode: multiply;
 }
 
 .plate {
@@ -39,8 +41,10 @@
   justify-content: center;
   border: 3px solid currentColor;
   border-radius: var(--radius-sm);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 40%, transparent);
-  background: transparent;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, currentColor 45%, transparent),
+    0 0 0 1px color-mix(in srgb, currentColor 25%, transparent);
+  background: color-mix(in srgb, var(--stamp-red) 6%, transparent);
 }
 
 .label {
@@ -51,13 +55,13 @@
   text-transform: uppercase;
   line-height: 1;
   mix-blend-mode: multiply;
-  opacity: 0.92;
+  opacity: 0.95;
 }
 
 .md .plate {
   min-width: 5.75rem;
-  min-height: 2.75rem;
-  padding: 0.65rem 1rem;
+  min-height: 2.85rem;
+  padding: 0.7rem 1.05rem;
 }
 
 .md .label {
@@ -65,9 +69,9 @@
 }
 
 .lg .plate {
-  min-width: 7.25rem;
-  min-height: 3.35rem;
-  padding: 0.85rem 1.25rem;
+  min-width: 7.5rem;
+  min-height: 3.5rem;
+  padding: 0.9rem 1.35rem;
 }
 
 .lg .label {
