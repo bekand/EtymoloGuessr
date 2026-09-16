@@ -69,16 +69,15 @@
   cursor: pointer;
   color: var(--stamp-red);
   transform: rotate(var(--stamp-tilt));
-  transition:
-    transform var(--duration-med) var(--ease-paper),
-    opacity var(--duration-fast) var(--ease-paper);
+  transition: opacity var(--duration-fast) var(--ease-paper);
 
-  &:hover:not(:disabled) {
-    transform: rotate(var(--stamp-tilt-hover)) translateY(-4px) scale(1.06);
+  &:hover:not(:disabled) .plate {
+    transform: rotate(calc(var(--stamp-tilt-hover) - var(--stamp-tilt)))
+      translateY(-4px) scale(1.06);
   }
 
-  &:active:not(:disabled) {
-    transform: rotate(0.6deg) translateY(3px) scale(0.95);
+  &:active:not(:disabled) .plate {
+    transform: rotate(calc(0.6deg - var(--stamp-tilt))) translateY(3px) scale(0.95);
     transition-duration: 80ms;
   }
 
@@ -96,6 +95,8 @@
     border-radius: 4px;
     box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 45%, transparent);
     background: color-mix(in srgb, var(--stamp-red) 6%, transparent);
+    pointer-events: none;
+    transition: transform var(--duration-med) var(--ease-paper);
   }
 
   .label {

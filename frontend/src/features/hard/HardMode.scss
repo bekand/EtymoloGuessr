@@ -70,6 +70,7 @@
   }
 
   .palette {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
@@ -104,6 +105,8 @@
     font-family: var(--font-serif);
     font-size: var(--text-xs);
     color: var(--ink-muted);
+    position: absolute;
+    bottom: -3rem;
   }
 
   .hardBoard {
@@ -135,7 +138,7 @@
   }
 
   .submit {
-    margin-top: var(--space-3);
+    margin-top: var(--space-1);
     display: flex;
     justify-content: flex-end;
     width: 100%;

@@ -70,7 +70,7 @@ export function HardMode() {
           ? solveMutation.error.message
           : 'Could not submit that graph.')
         : allPlaced
-          ? 'Place every card, then draw the line from descendant to ancestor. Submit when ready.'
+          ? 'Submit when ready.'
           : 'Build the graph!'
 
   function handleNext() {

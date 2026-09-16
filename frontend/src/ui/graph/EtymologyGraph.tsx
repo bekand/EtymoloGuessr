@@ -1,4 +1,3 @@
-import { useMemo } from 'react'
 import { Background, MarkerType, ReactFlow } from '@xyflow/react'
 import type { Graph, Term } from '@/api/types'
 import { EtymologyNode } from './EtymologyNode'
@@ -9,6 +8,12 @@ import './EtymologyGraph.scss'
 
 const nodeTypes = { etymology: EtymologyNode }
 const edgeTypes = { ink: InkEdge }
+const inkMarker = {
+  type: MarkerType.ArrowClosed,
+  width: 14,
+  height: 14,
+  color: '#2e2a26',
+} as const
 
 type EtymologyGraphProps = {
   graph: Graph
@@ -17,24 +22,11 @@ type EtymologyGraphProps = {
 }
 
 export function EtymologyGraph({ graph, leafA, leafB }: EtymologyGraphProps) {
-  const { nodes, edges } = useMemo(
-    () => layoutEtymologyGraph(graph, leafA, leafB),
-    [graph, leafA, leafB],
-  )
-
-  const markedEdges = useMemo(
-    () =>
-      edges.map((edge) => ({
-        ...edge,
-        markerEnd: {
-          type: MarkerType.ArrowClosed,
-          width: 14,
-          height: 14,
-          color: '#2e2a26',
-        },
-      })),
-    [edges],
-  )
+  const { nodes, edges } = layoutEtymologyGraph(graph, leafA, leafB)
+  const markedEdges = edges.map((edge) => ({
+    ...edge,
+    markerEnd: inkMarker,
+  }))
 
   return (
     <div className="etymologyGraph" role="img" aria-label="Etymology relationships">

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type DragEvent, type Ref } from 'react'
+import { useEffect, useImperativeHandle, useRef, useState, type DragEvent, type Ref } from 'react'
 import {
   Background,
   MarkerType,
@@ -111,6 +111,28 @@ function toGraphEdges(edges: Edge[]): GraphEdge[] {
   return edges.map((edge) => ({ from: edge.source, to: edge.target }))
 }
 
+function tryFitPlacedNodes(
+  pendingFitRef: { current: boolean },
+  storeNodes: Node[],
+  expectedCount: number,
+  fitView: (options: typeof fitPlacedView) => unknown,
+) {
+  if (!pendingFitRef.current) {
+    return
+  }
+  if (storeNodes.length < expectedCount) {
+    return
+  }
+  const measured = storeNodes.every(
+    (node) => (node.measured?.width ?? node.width) && (node.measured?.height ?? node.height),
+  )
+  if (!measured) {
+    return
+  }
+  pendingFitRef.current = false
+  void fitView(fitPlacedView)
+}
+
 function HardCanvasBoard({
   graph,
   leafA,
@@ -122,27 +144,14 @@ function HardCanvasBoard({
   const { screenToFlowPosition, fitView, getEdges, getNodes } = useReactFlow()
   const nodesInitialized = useNodesInitialized()
   const pendingFitRef = useRef(false)
-  const nodeCountRef = useRef(0)
-  const cards = useMemo(
-    () => paletteNodes(graph, leafA, leafB),
-    [graph, leafA, leafB],
-  )
-  const cardById = useMemo(
-    () => new Map(graph.nodes.map((node) => [node.id, node])),
-    [graph.nodes],
-  )
+  const cards = paletteNodes(graph, leafA, leafB)
+  const cardById = new Map(graph.nodes.map((node) => [node.id, node]))
   const tones = shuffle(PALETTE_TONES, graph.nodes.map((node) => node.id).join('|'))
 
   const [nodes, setNodes] = useState<Node<EtymologyNodeData, 'etymology'>[]>([])
   const [edges, setEdges] = useState<Edge[]>([])
-  const edgesRef = useRef(edges)
-  edgesRef.current = edges
-  nodeCountRef.current = nodes.length
 
-  const placedIds = useMemo(
-    () => new Set(nodes.map((node) => node.id)),
-    [nodes],
-  )
+  const placedIds = new Set(nodes.map((node) => node.id))
   const allPlaced = graph.nodes.length > 0 && nodes.length === graph.nodes.length
 
   useEffect(() => {
@@ -154,134 +163,98 @@ function HardCanvasBoard({
     () => ({
       getGraphEdges: () => {
         const live = getEdges()
-        return toGraphEdges(live.length > 0 ? live : edgesRef.current)
+        return toGraphEdges(live.length > 0 ? live : edges)
       },
     }),
-    [getEdges],
+    [edges, getEdges],
   )
-
-  const fitPlacedNodes = useCallback(() => {
-    if (!pendingFitRef.current) {
-      return
-    }
-    const storeNodes = getNodes()
-    if (storeNodes.length < nodeCountRef.current) {
-      return
-    }
-    const measured = storeNodes.every(
-      (node) => (node.measured?.width ?? node.width) && (node.measured?.height ?? node.height),
-    )
-    if (!measured) {
-      return
-    }
-    pendingFitRef.current = false
-    void fitView(fitPlacedView)
-  }, [fitView, getNodes])
 
   useEffect(() => {
     if (!nodesInitialized) {
       return
     }
-    fitPlacedNodes()
-  }, [fitPlacedNodes, nodes, nodesInitialized])
+    tryFitPlacedNodes(pendingFitRef, getNodes(), nodes.length, fitView)
+  }, [fitView, getNodes, nodes, nodesInitialized])
 
-  const placeNode = useCallback(
-    (id: string, position?: { x: number; y: number }) => {
-      const card = cardById.get(id)
-      if (!card || disabled) {
-        return
+  const placeNode = (id: string, position?: { x: number; y: number }) => {
+    const card = cardById.get(id)
+    if (!card || disabled) {
+      return
+    }
+    setNodes((current) => {
+      if (current.some((node) => node.id === id)) {
+        return current
       }
-      setNodes((current) => {
-        if (current.some((node) => node.id === id)) {
-          return current
-        }
-        const nextPos = position ?? nextPlacePosition(current.length)
-        pendingFitRef.current = true
-        return [...current, toFlowNode(card, nextPos, true)]
-      })
-    },
-    [cardById, disabled],
-  )
+      const nextPos = position ?? nextPlacePosition(current.length)
+      pendingFitRef.current = true
+      return [...current, toFlowNode(card, nextPos, true)]
+    })
+  }
 
-  const unplaceNode = useCallback(
-    (id: string) => {
-      if (disabled || !placedIds.has(id)) {
-        return
-      }
-      setNodes((current) => current.filter((node) => node.id !== id))
-      setEdges((current) => current.filter((edge) => edge.source !== id && edge.target !== id))
-    },
-    [disabled, placedIds],
-  )
+  const unplaceNode = (id: string) => {
+    if (disabled || !placedIds.has(id)) {
+      return
+    }
+    setNodes((current) => current.filter((node) => node.id !== id))
+    setEdges((current) => current.filter((edge) => edge.source !== id && edge.target !== id))
+  }
 
-  const onNodesChangeHandler: OnNodesChange<EtymologyFlowNode> = useCallback(
-    (changes) => {
-      if (disabled) {
-        return
-      }
-      setNodes((current) => applyNodeChanges(changes, current))
-      if (changes.some((change) => change.type === 'dimensions')) {
-        fitPlacedNodes()
-      }
-    },
-    [disabled, fitPlacedNodes],
-  )
+  const onNodesChangeHandler: OnNodesChange<EtymologyFlowNode> = (changes) => {
+    if (disabled) {
+      return
+    }
+    setNodes((current) => applyNodeChanges(changes, current))
+    if (changes.some((change) => change.type === 'dimensions')) {
+      tryFitPlacedNodes(pendingFitRef, getNodes(), nodes.length, fitView)
+    }
+  }
 
-  const onEdgesChangeHandler: OnEdgesChange = useCallback(
-    (changes) => {
-      if (disabled) {
-        return
-      }
-      setEdges((current) => applyEdgeChanges(changes, current))
-    },
-    [disabled],
-  )
+  const onEdgesChangeHandler: OnEdgesChange = (changes) => {
+    if (disabled) {
+      return
+    }
+    setEdges((current) => applyEdgeChanges(changes, current))
+  }
 
-  const onConnect: OnConnect = useCallback(
-    (connection: Connection) => {
-      if (disabled || !connection.source || !connection.target || connection.source === connection.target) {
-        return
+  const onConnect: OnConnect = (connection: Connection) => {
+    if (disabled || !connection.source || !connection.target || connection.source === connection.target) {
+      return
+    }
+    setEdges((current) => {
+      const duplicate = current.some(
+        (edge) => edge.source === connection.source && edge.target === connection.target,
+      )
+      if (duplicate) {
+        return current
       }
-      setEdges((current) => {
-        const duplicate = current.some(
-          (edge) => edge.source === connection.source && edge.target === connection.target,
-        )
-        if (duplicate) {
-          return current
-        }
-        return addEdge(
-          {
-            ...connection,
-            type: 'ink',
-            markerEnd: inkMarker,
-          },
-          current,
-        )
-      })
-    },
-    [disabled],
-  )
+      return addEdge(
+        {
+          ...connection,
+          type: 'ink',
+          markerEnd: inkMarker,
+        },
+        current,
+      )
+    })
+  }
 
-  const handleDrop = useCallback(
-    (event: DragEvent) => {
-      event.preventDefault()
-      const id = event.dataTransfer.getData(NODE_MIME)
-      if (!id) {
-        return
-      }
-      const position = screenToFlowPosition({ x: event.clientX, y: event.clientY })
-      placeNode(id, {
-        x: position.x - NODE_WIDTH / 2,
-        y: position.y - NODE_HEIGHT / 2,
-      })
-    },
-    [placeNode, screenToFlowPosition],
-  )
+  const handleDrop = (event: DragEvent) => {
+    event.preventDefault()
+    const id = event.dataTransfer.getData(NODE_MIME)
+    if (!id) {
+      return
+    }
+    const position = screenToFlowPosition({ x: event.clientX, y: event.clientY })
+    placeNode(id, {
+      x: position.x - NODE_WIDTH / 2,
+      y: position.y - NODE_HEIGHT / 2,
+    })
+  }
 
   return (
     <div className="hardPlay">
       <section className="palette" aria-label="Word cards">
-        <p className="sectionLabel">Cards</p>
+        <p className="sectionLabel">Terms</p>
         <div className="notes">
           {cards.map((card, index) => {
             const placed = placedIds.has(card.id)
@@ -316,8 +289,7 @@ function HardCanvasBoard({
           })}
         </div>
         <p className="paletteHint">
-          Drag onto the blotter or tap to place. Tap again to take a card back. Draw ink from a
-          word toward its ancestor. Click a line to erase it.
+          Drag onto the blotter or tap to place. Tap again to take back.
         </p>
       </section>
 
