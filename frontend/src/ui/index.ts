@@ -1,0 +1,6 @@
+export { Sheet } from './Sheet/Sheet'
+export { IndexCard } from './IndexCard/IndexCard'
+export { PostIt } from './PostIt/PostIt'
+export { InkButton } from './InkButton/InkButton'
+export { Stamp } from './Stamp/Stamp'
+export { Colophon } from './Colophon/Colophon'

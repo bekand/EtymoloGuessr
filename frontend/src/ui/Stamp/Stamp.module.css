@@ -1,0 +1,74 @@
+.stamp {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--stamp-red);
+  transform: rotate(var(--stamp-tilt));
+  mix-blend-mode: multiply;
+  transition:
+    transform var(--duration-med) var(--ease-paper),
+    opacity var(--duration-fast) var(--ease-paper);
+}
+
+.stamp:hover:not(:disabled) {
+  transform: rotate(var(--stamp-tilt-hover)) translateY(-4px) scale(1.06);
+}
+
+.stamp:active:not(:disabled) {
+  transform: rotate(0.6deg) translateY(3px) scale(0.95);
+  transition-duration: 80ms;
+}
+
+.stamp:disabled {
+  opacity: 0.34;
+  cursor: not-allowed;
+  filter: grayscale(0.2);
+  mix-blend-mode: multiply;
+}
+
+.plate {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 3px solid currentColor;
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 45%, transparent);
+  background: color-mix(in srgb, var(--stamp-red) 6%, transparent);
+}
+
+.label {
+  display: block;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  line-height: 1;
+  mix-blend-mode: multiply;
+  opacity: 0.95;
+}
+
+.md .plate {
+  min-width: 5.75rem;
+  min-height: 2.85rem;
+  padding: 0.7rem 1.05rem;
+}
+
+.md .label {
+  font-size: var(--text-sm);
+}
+
+.lg .plate {
+  min-width: 7.5rem;
+  min-height: 3.5rem;
+  padding: 0.9rem 1.35rem;
+}
+
+.lg .label {
+  font-size: var(--text-base);
+}

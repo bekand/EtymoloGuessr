@@ -1,0 +1,56 @@
+:root {
+  /* Paper — light cream, not pure white */
+  --paper: #f7f2e9;
+  --paper-ruled: #faf6ef;
+  --paper-kraft: #ebe3d4;
+  --paper-blotter: #efe8dc;
+  --surface: #e9e1d3;
+
+  /* Ink — darker graphite for contrast on light paper */
+  --ink: #100e0c;
+  --ink-muted: #2e2a26;
+  --ink-faint: #5a544c;
+  --rule: #cfc4b2;
+
+  /* Post-it accents — low saturation */
+  --note-yellow: #efe4ad;
+  --note-pink: #edd0cc;
+  --note-blue: #d0dde3;
+  --note-green: #d3dec4;
+
+  /* Stamp — primary actions, used sparingly */
+  --stamp-red: #7a2424;
+  --stamp-red-soft: rgba(122, 36, 36, 0.14);
+
+  /* Type */
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Code', monospace;
+  --font-serif: 'IBM Plex Serif', 'Iowan Old Style', 'Palatino Linotype', serif;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1.0625rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.75rem;
+  --text-hero: clamp(2.5rem, 8vw, 4.5rem);
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-8: 3rem;
+
+  --radius-sm: 1px;
+  --radius-md: 2px;
+
+  --stack-offset: 2px;
+  --tilt-soft: -0.6deg;
+  --tilt-alt: 0.8deg;
+  --stamp-tilt: -2.25deg;
+  --stamp-tilt-hover: -4.5deg;
+
+  --ease-paper: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-fast: 160ms;
+  --duration-med: 320ms;
+}

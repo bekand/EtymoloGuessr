@@ -8,6 +8,10 @@ __pycache__/
 dist/
 build/
 
+# Frontend (Vite / pnpm)
+frontend/node_modules/
+frontend/dist/
+
 data/raw/*
 !data/raw/.gitkeep
 data/derived/*
