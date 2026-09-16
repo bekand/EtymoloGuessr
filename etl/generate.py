@@ -62,25 +62,28 @@ def leaf_reuse_key(lang: str, term: str) -> str:
     return f"{lang}\t{term}"
 
 
-def tokenize(text: str | None) -> set[str]:
-    if not text:
-        return set()
-    words = set()
-    buf = []
-    for ch in text.lower():
+def _iter_content_tokens(text: str):
+    """Yield alphanumeric tokens, skipping function words and short crumbs."""
+    buf: list[str] = []
+    for ch in text:
         if ch.isalnum():
             buf.append(ch)
         else:
             if buf:
                 w = "".join(buf)
-                if w not in FUNCTION_WORDS and len(w) >= MIN_TOKEN_LENGTH:
-                    words.add(w)
                 buf = []
+                if w not in FUNCTION_WORDS and len(w) >= MIN_TOKEN_LENGTH:
+                    yield w
     if buf:
         w = "".join(buf)
         if w not in FUNCTION_WORDS and len(w) >= MIN_TOKEN_LENGTH:
-            words.add(w)
-    return words
+            yield w
+
+
+def tokenize(text: str | None) -> set[str]:
+    if not text:
+        return set()
+    return set(_iter_content_tokens(text.lower()))
 
 
 def gloss_overlap(a: str | None, b: str | None) -> float:
@@ -108,15 +111,26 @@ def normalize_label(text: str | None) -> str:
     return s
 
 
+def first_content_word(text: str | None) -> str:
+    """First non-function token after normalize_label, or empty."""
+    for word in _iter_content_tokens(normalize_label(text)):
+        return word
+    return ""
+
+
 def leaf_shares_lca_label(
     leaf_term: str | None,
     leaf_gloss: str | None,
     lca_term: str | None,
     lca_gloss: str | None,
 ) -> bool:
-    """True when a leaf term or gloss is identical to the LCA term or gloss."""
-    leaf_labels = {normalize_label(leaf_term), normalize_label(leaf_gloss)} - {""}
-    lca_labels = {normalize_label(lca_term), normalize_label(lca_gloss)} - {""}
+    """True when a leaf and the LCA share a first content word (term or gloss).
+
+    Catches identical labels and head-word matches like leaf ``dragon`` vs LCA
+    gloss ``dragon, monster``.
+    """
+    leaf_labels = {first_content_word(leaf_term), first_content_word(leaf_gloss)} - {""}
+    lca_labels = {first_content_word(lca_term), first_content_word(lca_gloss)} - {""}
     return bool(leaf_labels & lca_labels)
 
 
@@ -163,6 +177,8 @@ def quality_score(
     *,
     lang_a: str,
     lang_b: str,
+    term_a: str,
+    term_b: str,
     high_overlap: bool,
     lca_is_modern: bool,
 ) -> int:
@@ -171,7 +187,9 @@ def quality_score(
     if lang_a == lang_b:
         score -= 3
     if {lang_a, lang_b} == {"Spanish", "Portuguese"}:
-        score -= 1
+        a, b = normalize_label(term_a), normalize_label(term_b)
+        if len(a) >= 3 and len(b) >= 3 and a[:3] == b[:3]:
+            score -= 2
     if lca_is_modern:
         score -= 1
     if high_overlap:
@@ -374,6 +392,8 @@ def extract_candidates(
         score = quality_score(
             lang_a=lang_a,
             lang_b=lang_b,
+            term_a=term_a,
+            term_b=term_b,
             high_overlap=high_overlap,
             lca_is_modern=lca_lang in leaf_langs,
         )

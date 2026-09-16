@@ -73,7 +73,7 @@ Integer 0-5, stored on each puzzle. Start at 5, then:
 | Penalty | Points |
 |---|---|
 | Same leaf language | -3 |
-| Spanish–Portuguese pair | -1 |
+| Spanish–Portuguese pair whose leaf terms share the first 3 characters | -2 |
 | LCA is a modern leaf language (EN/ES/PT/DE) | -1 |
 | High overlap (either leaf term still appears in the LCA gloss) | -1 |
 

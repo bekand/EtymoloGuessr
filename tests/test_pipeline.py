@@ -57,6 +57,8 @@ def test_leaf_shares_lca_label():
     assert leaf_shares_lca_label("Gift", "present", "*gift", "something given")
     assert leaf_shares_lca_label("poison", "a toxic substance", "*giftiz", "a toxic substance")
     assert leaf_shares_lca_label("hound", "dog", "*hundaz", "hound")
+    assert leaf_shares_lca_label("dragon", "a large serpent", "*drakō", "dragon, monster")
+    assert leaf_shares_lca_label("dragon", "a large serpent", "*drakō", "a dragon or monster")
     assert not leaf_shares_lca_label("gift", "present", "*giftiz", "poison")
 
 
@@ -70,24 +72,39 @@ def test_puzzle_id_order_invariant():
 
 
 def test_quality_score_is_integer_rubric():
-    base: dict[str, Any] = dict(high_overlap=False, lca_is_modern=False)
+    base: dict[str, Any] = dict(
+        high_overlap=False, lca_is_modern=False, term_a="alpha", term_b="omega"
+    )
     assert quality_score(lang_a="English", lang_b="German", **base) == 5
     assert quality_score(lang_a="English", lang_b="English", **base) == 2  # −3 same-lang
-    assert quality_score(lang_a="Spanish", lang_b="Portuguese", **base) == 4
+    # Spanish–Portuguese only penalized when leaf terms share a 3-char prefix (−2).
+    assert quality_score(lang_a="Spanish", lang_b="Portuguese", **base) == 5
+    assert (
+        quality_score(
+            lang_a="Spanish",
+            lang_b="Portuguese",
+            **{**base, "term_a": "hombre", "term_b": "homem"},
+        )
+        == 3
+    )
     assert quality_score(lang_a="English", lang_b="German", **{**base, "lca_is_modern": True}) == 4
     assert quality_score(lang_a="English", lang_b="German", **{**base, "high_overlap": True}) == 4
     worst_cross = quality_score(
         lang_a="Spanish",
         lang_b="Portuguese",
+        term_a="hombre",
+        term_b="homem",
         high_overlap=True,
         lca_is_modern=True,
     )
-    assert worst_cross == 2
+    assert worst_cross == 1
     assert isinstance(worst_cross, int)
     assert (
         quality_score(
             lang_a="English",
             lang_b="English",
+            term_a="gift",
+            term_b="present",
             high_overlap=True,
             lca_is_modern=True,
         )
