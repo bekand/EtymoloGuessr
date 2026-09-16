@@ -5,19 +5,17 @@
   width: 100%;
   min-height: 5.5rem;
   margin: 0;
-  padding: var(--space-4);
+  padding: var(--space-5) var(--space-4) var(--space-4);
   text-align: left;
   font-family: var(--font-serif);
   font-size: var(--text-base);
   line-height: 1.4;
   color: var(--ink);
   border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
-  box-shadow: var(--stack-offset) var(--stack-offset) 0 rgba(26, 23, 20, 0.08);
+  box-shadow: var(--stack-offset) var(--stack-offset) 0 rgba(16, 14, 12, 0.08);
   cursor: pointer;
   transform: rotate(var(--tilt-soft));
-  transition:
-    transform var(--duration-fast) var(--ease-paper),
-    box-shadow var(--duration-fast) var(--ease-paper);
+  transition: transform var(--duration-fast) var(--ease-paper);
 }
 
 .note:nth-child(even) {
@@ -26,12 +24,23 @@
 
 .note:hover:not(:disabled) {
   transform: rotate(0deg) translateY(-1px);
-  box-shadow: 3px 3px 0 rgba(26, 23, 20, 0.1);
 }
 
 .note:disabled {
   cursor: default;
   opacity: 0.9;
+}
+
+.marker {
+  position: absolute;
+  top: var(--space-2);
+  left: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  color: var(--ink-muted);
 }
 
 .yellow {

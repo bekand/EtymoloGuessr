@@ -5,7 +5,12 @@ type EasyShellProps = {
   onBack: () => void
 }
 
-const NOTE_TONES = ['yellow', 'pink', 'blue', 'green'] as const
+const CHOICES = [
+  { tone: 'yellow', marker: 'A' },
+  { tone: 'pink', marker: 'B' },
+  { tone: 'blue', marker: 'C' },
+  { tone: 'green', marker: 'D' },
+] as const
 
 export function EasyShell({ onBack }: EasyShellProps) {
   return (
@@ -35,8 +40,15 @@ export function EasyShell({ onBack }: EasyShellProps) {
         <section className={styles.choices} aria-label="Meaning choices placeholders">
           <p className={styles.sectionLabel}>Choose one</p>
           <div className={styles.notes}>
-            {NOTE_TONES.map((tone) => (
-              <PostIt key={tone} tone={tone} placeholder disabled aria-label={`Choice ${tone}`} />
+            {CHOICES.map(({ tone, marker }) => (
+              <PostIt
+                key={marker}
+                tone={tone}
+                marker={marker}
+                placeholder
+                disabled
+                aria-label={`Choice ${marker}`}
+              />
             ))}
           </div>
         </section>

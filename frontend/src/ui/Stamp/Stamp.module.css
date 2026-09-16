@@ -13,18 +13,15 @@
   mix-blend-mode: multiply;
   transition:
     transform var(--duration-med) var(--ease-paper),
-    filter var(--duration-fast) var(--ease-paper),
     opacity var(--duration-fast) var(--ease-paper);
 }
 
 .stamp:hover:not(:disabled) {
-  transform: rotate(var(--stamp-tilt-hover)) translateY(-5px) scale(1.07);
-  filter: drop-shadow(4px 6px 0 rgba(16, 14, 12, 0.14));
+  transform: rotate(var(--stamp-tilt-hover)) translateY(-4px) scale(1.06);
 }
 
 .stamp:active:not(:disabled) {
-  transform: rotate(0.6deg) translateY(4px) scale(0.94);
-  filter: drop-shadow(0 0 0 transparent);
+  transform: rotate(0.6deg) translateY(3px) scale(0.95);
   transition-duration: 80ms;
 }
 
@@ -40,10 +37,8 @@
   align-items: center;
   justify-content: center;
   border: 3px solid currentColor;
-  border-radius: var(--radius-sm);
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, currentColor 45%, transparent),
-    0 0 0 1px color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 45%, transparent);
   background: color-mix(in srgb, var(--stamp-red) 6%, transparent);
 }
 

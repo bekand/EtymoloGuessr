@@ -6,6 +6,7 @@ type PostItTone = 'yellow' | 'pink' | 'blue' | 'green'
 type PostItProps = {
   children?: ReactNode
   tone?: PostItTone
+  marker?: string
   selected?: boolean
   placeholder?: boolean
   className?: string
@@ -21,6 +22,7 @@ const toneClass: Record<PostItTone, string> = {
 export function PostIt({
   children,
   tone = 'yellow',
+  marker,
   selected = false,
   placeholder = false,
   className,
@@ -39,6 +41,7 @@ export function PostIt({
 
   return (
     <button type={type} className={classes} aria-pressed={selected} {...rest}>
+      {marker ? <span className={styles.marker}>{marker}</span> : null}
       {placeholder && !children ? <span className={styles.lines} aria-hidden="true" /> : children}
     </button>
   )
