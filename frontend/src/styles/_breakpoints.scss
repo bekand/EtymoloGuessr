@@ -1,0 +1,27 @@
+// Shared layout breakpoints. Use the mixins — CSS vars cannot drive @media.
+$bp-tablet: 48rem;
+$bp-desktop: 64rem;
+
+@mixin mobile {
+  @media (max-width: #{$bp-tablet - 0.0625rem}) {
+    @content;
+  }
+}
+
+@mixin tablet {
+  @media (min-width: $bp-tablet) and (max-width: #{$bp-desktop - 0.0625rem}) {
+    @content;
+  }
+}
+
+@mixin desktop {
+  @media (min-width: $bp-desktop) {
+    @content;
+  }
+}
+
+@mixin below-desktop {
+  @media (max-width: #{$bp-desktop - 0.0625rem}) {
+    @content;
+  }
+}

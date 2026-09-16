@@ -1,3 +1,5 @@
+@use '../../styles/breakpoints' as bp;
+
 @keyframes hard-rise {
   from {
     opacity: 0;
@@ -15,7 +17,7 @@
   flex-direction: column;
   gap: var(--space-6);
   min-height: 100vh;
-  padding: clamp(1.25rem, 3vw, 2.5rem);
+  padding: var(--page-gutter);
 
   .header {
     display: flex;

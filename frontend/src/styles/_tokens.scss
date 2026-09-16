@@ -53,4 +53,9 @@
   --ease-paper: cubic-bezier(0.22, 1, 0.36, 1);
   --duration-fast: 160ms;
   --duration-med: 320ms;
+
+  /* Layout — match mixins in _breakpoints.scss */
+  --bp-tablet: 48rem;
+  --bp-desktop: 64rem;
+  --page-gutter: clamp(1.25rem, 3vw, 2.5rem);
 }

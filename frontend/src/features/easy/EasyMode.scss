@@ -1,3 +1,5 @@
+@use '../../styles/breakpoints' as bp;
+
 @keyframes easy-mode-settle {
   from {
     opacity: 0;
@@ -15,7 +17,7 @@
   flex-direction: column;
   gap: var(--space-6);
   min-height: 100vh;
-  padding: clamp(1.25rem, 3vw, 2.5rem);
+  padding: var(--page-gutter);
   animation: easy-mode-settle var(--duration-med) var(--ease-paper) both;
 
   .header {
@@ -73,6 +75,7 @@
     align-items: center;
     justify-content: center;
     gap: var(--space-4);
+    width: 100%;
   }
 
   .ampersand {
@@ -107,7 +110,7 @@
 
   .notes {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 10.5rem));
+    grid-template-columns: repeat(2, minmax(0, 15.75rem));
     gap: var(--space-3);
     width: max-content;
     max-width: 100%;
@@ -118,7 +121,7 @@
     flex-direction: column;
     align-items: flex-end;
     gap: var(--space-3);
-    width: min(100%, calc(21rem + var(--space-3)));
+    width: min(100%, calc(31.5rem + var(--space-3)));
     padding-top: var(--space-1);
   }
 
@@ -168,20 +171,65 @@
     padding-top: var(--space-1);
   }
 
-  @media (max-width: 720px) {
-    .header {
-      grid-template-columns: 1fr;
-      justify-items: start;
+  @include bp.mobile {
+    .cards {
+      flex-direction: column;
+      flex-wrap: nowrap;
+      align-items: stretch;
     }
 
-    .brand,
-    .mode {
-      justify-self: start;
+    .choices,
+    .submit {
+      width: 100%;
+    }
+
+    .notes {
+      grid-template-columns: minmax(0, 1fr);
+      width: 100%;
     }
 
     .submit {
+      max-width: none;
+    }
+
+    .graphPlaceholder {
+      height: min(22rem, 52vh);
+      min-height: 16rem;
+    }
+  }
+
+  @include bp.tablet {
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .notes {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       width: 100%;
-      max-width: calc(21rem + var(--space-3));
+    }
+
+    .choices,
+    .submit {
+      width: 100%;
+    }
+
+    .submit {
+      max-width: none;
+    }
+  }
+
+  @include bp.below-desktop {
+    .ampersand {
+      display: none;
+    }
+
+    .prompt {
+      align-items: stretch;
+    }
+
+    .instruction {
+      max-width: none;
     }
   }
 }
