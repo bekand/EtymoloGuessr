@@ -1,5 +1,5 @@
 import { Colophon, Sheet, Stamp } from '@/ui'
-import styles from './HomeScreen.module.css'
+import './HomeScreen.scss'
 
 type HomeScreenProps = {
   onEasy: () => void
@@ -7,13 +7,13 @@ type HomeScreenProps = {
 
 export function HomeScreen({ onEasy }: HomeScreenProps) {
   return (
-    <main className={styles.home}>
-      <div className={styles.atmosphere} aria-hidden="true" />
-      <Sheet as="section" tone="paper" className={styles.paper}>
-        <p className={styles.pageLabel}>Home</p>
-        <p className={styles.brand}>EtymoGuessr</p>
-        <h1 className={styles.headline}>Trace two words to one ancestor.</h1>
-        <div className={styles.actions}>
+    <main className="homeScreen">
+      <div className="atmosphere" aria-hidden="true" />
+      <Sheet as="section" tone="paper">
+        <p className="pageLabel">Home</p>
+        <p className="brand">EtymoGuessr</p>
+        <h1 className="headline">Trace two words to one ancestor.</h1>
+        <div className="actions">
           <Stamp size="lg" onClick={onEasy} aria-label="Play Easy mode">
             Easy
           </Stamp>
@@ -21,11 +21,11 @@ export function HomeScreen({ onEasy }: HomeScreenProps) {
             Hard
           </Stamp>
         </div>
-        <p className={styles.note}>
+        <p className="note">
           Puzzle data arrives with the Go API — shells only for now.
         </p>
       </Sheet>
-      <Colophon className={styles.colophon} />
+      <Colophon />
     </main>
   )
 }

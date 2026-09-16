@@ -1,4 +1,4 @@
-.button {
+.inkButton {
   appearance: none;
   display: inline-flex;
   align-items: center;
@@ -21,29 +21,29 @@
     color var(--duration-fast) var(--ease-paper),
     border-color var(--duration-fast) var(--ease-paper),
     opacity var(--duration-fast) var(--ease-paper);
-}
 
-.button:hover:not(:disabled) {
-  color: var(--stamp-red);
-  border-bottom-color: var(--stamp-red);
-}
+  &:hover:not(:disabled) {
+    color: var(--stamp-red);
+    border-bottom-color: var(--stamp-red);
+  }
 
-.button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
 
-.ink {
-  color: var(--ink);
-}
+  &.ink {
+    color: var(--ink);
+  }
 
-.ghost {
-  border-bottom-color: transparent;
-  color: var(--ink-muted);
-  letter-spacing: 0.06em;
-}
+  &.ghost {
+    border-bottom-color: transparent;
+    color: var(--ink-muted);
+    letter-spacing: 0.06em;
 
-.ghost:hover:not(:disabled) {
-  border-bottom-color: var(--ink-muted);
-  color: var(--ink);
+    &:hover:not(:disabled) {
+      border-bottom-color: var(--ink-muted);
+      color: var(--ink);
+    }
+  }
 }

@@ -1,5 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
-import styles from './PostIt.module.css'
+import './PostIt.scss'
 
 type PostItTone = 'yellow' | 'pink' | 'blue' | 'green'
 
@@ -12,13 +12,6 @@ type PostItProps = {
   className?: string
 } & ButtonHTMLAttributes<HTMLButtonElement>
 
-const toneClass: Record<PostItTone, string> = {
-  yellow: styles.yellow,
-  pink: styles.pink,
-  blue: styles.blue,
-  green: styles.green,
-}
-
 export function PostIt({
   children,
   tone = 'yellow',
@@ -30,10 +23,10 @@ export function PostIt({
   ...rest
 }: PostItProps) {
   const classes = [
-    styles.note,
-    toneClass[tone],
-    selected ? styles.selected : '',
-    placeholder ? styles.placeholder : '',
+    'postIt',
+    tone,
+    selected && 'selected',
+    placeholder && 'placeholder',
     className,
   ]
     .filter(Boolean)
@@ -41,8 +34,8 @@ export function PostIt({
 
   return (
     <button type={type} className={classes} aria-pressed={selected} {...rest}>
-      {marker ? <span className={styles.marker}>{marker}</span> : null}
-      {placeholder && !children ? <span className={styles.lines} aria-hidden="true" /> : children}
+      {marker ? <span className="marker">{marker}</span> : null}
+      {placeholder && !children ? <span className="lines" aria-hidden="true" /> : children}
     </button>
   )
 }

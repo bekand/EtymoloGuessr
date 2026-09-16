@@ -1,5 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
-import styles from './InkButton.module.css'
+import './InkButton.scss'
 
 type InkButtonProps = {
   children: ReactNode
@@ -14,7 +14,7 @@ export function InkButton({
   type = 'button',
   ...rest
 }: InkButtonProps) {
-  const classes = [styles.button, styles[variant], className].filter(Boolean).join(' ')
+  const classes = ['inkButton', variant, className].filter(Boolean).join(' ')
 
   return (
     <button type={type} className={classes} {...rest}>

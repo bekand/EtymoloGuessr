@@ -1,0 +1,44 @@
+.sheet {
+  position: relative;
+  width: 100%;
+  min-height: 100%;
+  color: var(--ink);
+  background-color: var(--paper);
+  background-image:
+    radial-gradient(ellipse 120% 80% at 12% 8%, rgba(255, 252, 245, 0.55), transparent 55%),
+    radial-gradient(ellipse 90% 70% at 88% 92%, rgba(180, 150, 110, 0.18), transparent 50%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent 28%);
+  border: 1px solid var(--rule);
+  box-shadow: var(--stack-offset) var(--stack-offset) 0 rgba(26, 23, 20, 0.08);
+
+  &.paper {
+    background-color: var(--paper);
+  }
+
+  &.ruled {
+    background-color: var(--paper-ruled);
+    background-image:
+      repeating-linear-gradient(
+        transparent,
+        transparent calc(1.7rem - 1px),
+        color-mix(in srgb, var(--rule) 55%, transparent) calc(1.7rem - 1px),
+        color-mix(in srgb, var(--rule) 55%, transparent) 1.7rem
+      ),
+      radial-gradient(ellipse 120% 80% at 12% 8%, rgba(255, 252, 245, 0.4), transparent 55%);
+    background-size: auto, auto;
+  }
+
+  &.kraft {
+    background-color: var(--paper-kraft);
+    background-image:
+      radial-gradient(ellipse 100% 80% at 20% 0%, rgba(255, 248, 230, 0.35), transparent 50%),
+      linear-gradient(135deg, rgba(26, 23, 20, 0.04), transparent 40%);
+  }
+
+  &.blotter {
+    background-color: var(--paper-blotter);
+    background-image:
+      radial-gradient(circle at 30% 20%, rgba(255, 250, 240, 0.25), transparent 45%),
+      radial-gradient(circle at 70% 80%, rgba(90, 70, 40, 0.12), transparent 50%);
+  }
+}

@@ -1,15 +1,15 @@
-import styles from './Colophon.module.css'
+import './Colophon.scss'
 
 type ColophonProps = {
   className?: string
 }
 
 export function Colophon({ className }: ColophonProps) {
-  const classes = [styles.colophon, className].filter(Boolean).join(' ')
+  const classes = ['colophon', className].filter(Boolean).join(' ')
 
   return (
     <footer className={classes}>
-      <p className={styles.line}>
+      <p className="line">
         Etymology data adapted from{' '}
         <a
           href="https://en.wiktionary.org/"
@@ -28,7 +28,7 @@ export function Colophon({ className }: ColophonProps) {
         </a>
         .
       </p>
-      <p className={styles.line}>
+      <p className="line">
         Licensed under{' '}
         <a
           href="https://creativecommons.org/licenses/by-sa/3.0/"

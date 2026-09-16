@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react'
-import styles from './Sheet.module.css'
+import './Sheet.scss'
 
 type SheetTone = 'paper' | 'ruled' | 'kraft' | 'blotter'
 
@@ -18,7 +18,7 @@ export function Sheet({
   style,
   as: Tag = 'div',
 }: SheetProps) {
-  const classes = [styles.sheet, styles[tone], className].filter(Boolean).join(' ')
+  const classes = ['sheet', tone, className].filter(Boolean).join(' ')
 
   return (
     <Tag className={classes} style={style}>

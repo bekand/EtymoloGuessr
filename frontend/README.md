@@ -8,7 +8,7 @@ React + TypeScript + Vite UI for EtymoGuessr. Paper/ink design tokens and primit
 
 - pnpm
 - React 19 + TypeScript + Vite
-- CSS variables + CSS Modules (no Tailwind)
+- Sass (SCSS) + CSS variables (no Tailwind)
 - IBM Plex Mono + Serif (`@fontsource`)
 - Screen navigation via React state (`home` / `easy` / `hard`) — no react-router
 
@@ -18,7 +18,7 @@ React + TypeScript + Vite UI for EtymoGuessr. Paper/ink design tokens and primit
 pnpm install
 pnpm dev      # Vite dev server
 pnpm build    # typecheck + production build
-pnpm lint     # oxlint
+pnpm lint     # eslint
 pnpm preview  # preview production build
 ```
 
@@ -26,7 +26,7 @@ pnpm preview  # preview production build
 
 ```
 src/
-  styles/          # tokens + global CSS
+  styles/          # tokens + global Sass
   ui/              # Sheet, IndexCard, PostIt, InkButton, Stamp, Colophon
   features/
     home/          # Home sheet + Easy / Hard entry

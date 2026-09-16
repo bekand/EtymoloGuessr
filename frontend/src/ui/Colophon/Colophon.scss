@@ -6,17 +6,17 @@
   font-size: var(--text-xs);
   line-height: 1.5;
   color: var(--ink-faint);
-}
 
-.line {
-  margin: 0 0 var(--space-1);
-}
+  .line {
+    margin: 0 0 var(--space-1);
 
-.line a {
-  color: var(--ink-muted);
-  text-underline-offset: 2px;
-}
+    a {
+      color: var(--ink-muted);
+      text-underline-offset: 2px;
 
-.line a:hover {
-  color: var(--stamp-red);
+      &:hover {
+        color: var(--stamp-red);
+      }
+    }
+  }
 }

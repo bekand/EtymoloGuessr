@@ -1,5 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
-import styles from './Stamp.module.css'
+import './Stamp.scss'
 
 type StampProps = {
   children: ReactNode
@@ -14,12 +14,12 @@ export function Stamp({
   type = 'button',
   ...rest
 }: StampProps) {
-  const classes = [styles.stamp, styles[size], className].filter(Boolean).join(' ')
+  const classes = ['stamp', size, className].filter(Boolean).join(' ')
 
   return (
     <button type={type} className={classes} {...rest}>
-      <span className={styles.plate}>
-        <span className={styles.label}>{children}</span>
+      <span className="plate">
+        <span className="label">{children}</span>
       </span>
     </button>
   )
