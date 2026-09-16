@@ -47,7 +47,7 @@ ON CONFLICT (id) DO UPDATE SET
 def require_database_url() -> str:
     url = database_url()
     if not url:
-        raise SystemExit("DATABASE_URL is not set")
+        raise SystemExit("database URL is not set (DATABASE_URL or config.yaml database_url)")
     return url
 
 
@@ -159,7 +159,7 @@ def truncate_puzzles() -> None:
 def ping() -> tuple[bool, str]:
     url = database_url()
     if not url:
-        return False, "DATABASE_URL is not set"
+        return False, "database URL is not set (DATABASE_URL or config.yaml database_url)"
     try:
         with connect(url) as conn:
             conn.execute("SELECT 1")

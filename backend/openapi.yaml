@@ -1,0 +1,138 @@
+openapi: 3.0.3
+info:
+  title: EtymoGuessr API
+  version: 0.1.0
+  description: Thin JSON layer over pregenerated etymology puzzles. Gold answers are never returned on GET.
+servers:
+  - url: http://localhost:8080
+paths:
+  /health:
+    get:
+      summary: Liveness and database ping
+      responses:
+        "200":
+          description: OK
+        "503":
+          description: Database unavailable
+  /puzzles/random:
+    get:
+      summary: Fetch a random enabled puzzle prompt
+      parameters:
+        - in: query
+          name: mode
+          schema:
+            type: string
+            enum: [easy, hard]
+            default: easy
+        - in: query
+          name: langPair
+          schema:
+            type: string
+            example: de-en
+        - in: query
+          name: minQuality
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Prompt without correctChoice or gold edges
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PuzzlePrompt"
+        "404":
+          description: No enabled puzzles match the filter
+  /puzzles/{id}/solve:
+    post:
+      summary: Score a submission and reveal gold
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SolveRequest"
+      responses:
+        "200":
+          description: Graded submission with gold graph
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SolveResponse"
+        "404":
+          description: Puzzle missing or disabled
+components:
+  schemas:
+    Term:
+      type: object
+      properties:
+        lang: { type: string }
+        term: { type: string }
+        gloss: { type: string, nullable: true }
+    Choice:
+      type: object
+      properties:
+        id: { type: string }
+        gloss: { type: string }
+    Graph:
+      type: object
+      properties:
+        nodes:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              lang: { type: string }
+              term: { type: string }
+              gloss: { type: string, nullable: true }
+              role: { type: string, enum: [leaf, ancestor] }
+        edges:
+          type: array
+          items:
+            type: object
+            properties:
+              from: { type: string }
+              to: { type: string }
+              reltype: { type: string }
+    PuzzlePrompt:
+      type: object
+      properties:
+        id: { type: string }
+        mode: { type: string, enum: [easy, hard] }
+        langPair: { type: string }
+        leafA: { $ref: "#/components/schemas/Term" }
+        leafB: { $ref: "#/components/schemas/Term" }
+        choices:
+          type: array
+          items: { $ref: "#/components/schemas/Choice" }
+        promptGraph:
+          $ref: "#/components/schemas/Graph"
+          description: Hard mode only. All gold nodes, ancestor gloss stripped, edges empty. Omitted for easy (use leafA/leafB).
+    SolveRequest:
+      type: object
+      properties:
+        mode: { type: string, enum: [easy, hard] }
+        choiceId: { type: string, description: Easy mode }
+        edges:
+          type: array
+          description: Hard mode directed edges
+          items:
+            type: object
+            properties:
+              from: { type: string }
+              to: { type: string }
+    SolveResponse:
+      type: object
+      properties:
+        correct: { type: boolean }
+        goldGraph: { $ref: "#/components/schemas/Graph" }
+        choices:
+          type: array
+          items: { $ref: "#/components/schemas/Choice" }
+        correctChoice: { type: string }

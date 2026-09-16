@@ -16,3 +16,7 @@ data/puzzles/*
 !data/puzzles/.gitkeep
 data/reports/*
 !data/reports/.gitkeep
+
+backend/api
+backend/api.exe
+backend/*.exe

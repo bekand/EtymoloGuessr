@@ -52,4 +52,16 @@ def default_puzzles_jsonl() -> Path:
 
 
 def database_url() -> str | None:
-    return os.environ.get("DATABASE_URL") or None
+    env = os.environ.get("DATABASE_URL")
+    if env and env.strip():
+        return env.strip()
+    try:
+        cfg = load_config()
+    except (OSError, yaml.YAMLError):
+        return None
+    if not isinstance(cfg, dict):
+        return None
+    value = cfg.get("database_url")
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None

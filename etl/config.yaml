@@ -1,3 +1,6 @@
+# Local Compose Postgres (see docker-compose.yml). DATABASE_URL env overrides this.
+database_url: postgres://etymoguessr:etymoguessr@localhost:5432/etymoguessr?sslmode=disable
+
 # Leaf languages use Wiktionary English names; codes are used in lang_pair ids.
 leaf_languages:
   English: en

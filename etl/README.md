@@ -15,7 +15,7 @@ uv run etl --help
 
 | Path | Role |
 |---|---|
-| `etl/config.yaml` | Leaf languages, ancestor allowlist, reltypes, quality thresholds, source URLs |
+| `etl/config.yaml` | Leaf languages, ancestor allowlist, reltypes, quality thresholds, source URLs, local `database_url` |
 | `etl/fixtures/` | Tiny committed graph + glosses for tests and local iteration |
 | `data/raw/` | Downloaded parquet / JSONL, checksums, `manifest.json`, `NOTICE` (gitignored) |
 | `data/derived/` | Filtered edges, gloss index (gitignored) |
@@ -28,11 +28,13 @@ Large dumps stay out of git. Pin URLs (and optional SHA-256) in `config.yaml`.
 
 | Variable | Meaning |
 |---|---|
-| `DATABASE_URL` | Postgres DSN for `--db`, `load`, `disable`, `reset --puzzles`, `inspect --db`, `validate --db`, `doctor` |
+| `DATABASE_URL` | Optional override of `config.yaml` `database_url` (Compose DSN is the committed default) |
 | `ETL_DATA_DIR` | Override the `data/` root (tests use this) |
 | `ETL_CONFIG` | Override `etl/config.yaml` |
 
-The CLI never creates the `puzzles` table. Go owns migrations. ETL assumes the table already exists (`etl doctor` checks).
+Postgres commands (`--db`, `load`, `disable`, `reset --puzzles`, `inspect --db`, `validate --db`, `doctor`) use `DATABASE_URL` if set, otherwise `database_url` in `etl/config.yaml`.
+
+The CLI never creates the `puzzles` table. The Go API applies migrations on startup (`AUTO_MIGRATE=true`). ETL assumes the table already exists (`etl doctor` checks).
 
 Expected columns: `id`, `enabled`, `leaf_a`, `leaf_b`, `answer_graph`, `choices`, `correct_choice`, `quality_score`, `lang_pair`, `source`. Upserts key on `id`.
 
@@ -44,7 +46,7 @@ Canonical gold is **`answer_graph` only**. The player prompt is derived as `{nod
 | Load / `from_dict()` | Requires `answer_graph`; rejects payloads that still include `prompt_graph` |
 | Postgres upsert | Writes `answer_graph` only |
 | Validate | Checks `answer_graph` structure |
-| Go API (planned) | `GET` builds prompt from gold; never send edges / `correct_choice` until solve |
+| Go API | `GET /puzzles/random` builds prompt from gold; never send edges / `correct_choice` until `POST /puzzles/{id}/solve` |
 
 ## Data sources and license
 
@@ -132,6 +134,17 @@ Flags:
 
 If you omit every sink, output is `data/puzzles/puzzles.jsonl`. Funnel counts always go to stderr and `data/reports/funnel.json`.
 
+**JSONL and Postgres are separate sinks.** `generate` always walks `data/derived/` and writes to exactly one of them (or stdout). It never reads an existing puzzle file.
+
+| You want | Command |
+|---|---|
+| New JSONL (overwrite file; DB unchanged) | `etl generate` or `etl generate --jsonl PATH` |
+| New rows in Postgres (file unchanged; derived walked again) | `etl generate --db` |
+| File you already have → Postgres | `etl load PATH` (no generate) |
+| Both a new file and DB | `etl generate --jsonl PATH` then `etl load PATH` |
+
+`--db` does not reuse `puzzles.jsonl` on purpose: that file may be a reviewed subset, a different `--n`/`--seed`, or stale vs derived. `load` is the path that trusts the file. `generate --db` is the path that trusts the graph.
+
 With `--n > 0`, candidate search **early-exits** once enough quality survivors are found (and only walks leaf pairs that share an ancestor). Use `--n 0` for a full pass. Early exit can change which top-N puzzles you get versus an exhaustive quality sort over every pair.
 
 Rejection reasons in the funnel include `no_gloss`, `lca_term_too_short`, `too_big`, `same_meaning`, `no_lca`, `proper_noun_leaf`, `below_min_quality`, `leaf_reuse`, `insufficient_distractors`, `early_exit`.
@@ -210,7 +223,7 @@ Exit code `1` if any puzzle fails.
 
 ### `etl load PATH`
 
-Validate a JSONL file and upsert it into Postgres without regenerating. Use for fixtures or a reviewed set someone else generated.
+Validate a JSONL file and upsert it into Postgres **without** walking the graph or changing the file. This is how you reuse an existing `puzzles.jsonl` (or a snapshot someone else generated). `etl generate --db` will not do that.
 
 ```bash
 uv run etl load data/puzzles/puzzles.jsonl
@@ -237,11 +250,17 @@ uv run etl inspect --random
 uv run etl validate
 ```
 
-After Postgres and migrations exist:
+After Postgres exists (API applies migrations on startup):
 
 ```bash
+docker compose up db -d
+# ETL reads database_url from etl/config.yaml (override with DATABASE_URL if needed)
+(cd backend && DATABASE_URL=postgres://etymoguessr:etymoguessr@localhost:5432/etymoguessr?sslmode=disable go run ./cmd/api)
 uv run etl doctor
-uv run etl generate --db --n 50 --seed 1
+# already have puzzles.jsonl? load it — do not generate --db (that re-walks the graph)
+uv run etl load data/puzzles/puzzles.jsonl
+# or extract again from derived into Postgres only:
+# uv run etl generate --db --n 50 --seed 1
 uv run etl inspect --db --random
 uv run etl disable <id>          # if a row looks wrong
 ```

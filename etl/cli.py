@@ -65,10 +65,14 @@ def generate(
     jsonl: Optional[Path] = typer.Option(
         None,
         "--jsonl",
-        help="Write JSONL (default data/puzzles/puzzles.jsonl if no other sink)",
+        help="Write JSONL only (does not upsert Postgres)",
         show_default=False,
     ),
-    db: bool = typer.Option(False, "--db", help="Upsert into Postgres"),
+    db: bool = typer.Option(
+        False,
+        "--db",
+        help="Upsert a fresh generate run into Postgres (does not read JSONL; use etl load for that)",
+    ),
     dry_run: bool = typer.Option(False, "--dry-run", help="Counts and funnel only, no write"),
     verbose: bool = typer.Option(
         False,
@@ -77,7 +81,12 @@ def generate(
         help="Print timed stage progress on stderr (load, graph, candidates, emit, write)",
     ),
 ) -> None:
-    """Extract puzzles from derived artifacts (does not download)."""
+    """Extract puzzles from derived artifacts (does not download).
+
+    One sink only: default JSONL, --jsonl PATH, --stdout, or --db.
+    Writing JSONL does not touch Postgres. --db always regenerates from
+    derived data and ignores any existing JSONL (use `etl load` to upsert a file).
+    """
     sinks = sum([stdout, db, jsonl is not None])
     if sinks > 1:
         raise typer.BadParameter("choose one sink: --stdout, --jsonl, or --db")
@@ -240,7 +249,7 @@ def validate(
 def load(
     path: Path = typer.Argument(..., exists=True, readable=True),
 ) -> None:
-    """JSONL to DB upsert without regenerating."""
+    """Validate JSONL and upsert into Postgres. Does not run generate."""
     puzzles = read_jsonl(path)
     errors = validate_puzzles(puzzles)
     if errors:
