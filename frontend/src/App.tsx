@@ -1,20 +1,15 @@
-import { useState } from 'react'
+import { Navigate, Route, Routes } from 'react-router-dom'
 import { EasyMode } from '@/features/easy/EasyMode'
-import { HardStub } from '@/features/hard/HardStub'
+import { HardMode } from '@/features/hard/HardMode'
 import { HomeScreen } from '@/features/home/HomeScreen'
 
-export type Screen = 'home' | 'easy' | 'hard'
-
 export default function App() {
-  const [screen, setScreen] = useState<Screen>('home')
-
-  if (screen === 'easy') {
-    return <EasyMode onBack={() => setScreen('home')} />
-  }
-
-  if (screen === 'hard') {
-    return <HardStub onBack={() => setScreen('home')} />
-  }
-
-  return <HomeScreen onEasy={() => setScreen('easy')} />
+  return (
+    <Routes>
+      <Route path="/" element={<HomeScreen />} />
+      <Route path="/easy" element={<EasyMode />} />
+      <Route path="/hard" element={<HardMode />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  )
 }

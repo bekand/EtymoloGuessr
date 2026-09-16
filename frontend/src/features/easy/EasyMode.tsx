@@ -1,19 +1,18 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import {
   clearEasyPuzzleLock,
   fetchLockedRandomEasy,
+  isPuzzleNotFound,
   puzzleKeys,
   solveEasyPuzzle,
 } from '@/api/puzzles'
 import type { PuzzlePrompt } from '@/api/types'
-import { Colophon, EtymologyGraph, IndexCard, InkButton, PostIt, Sheet, Stamp } from '@/ui'
+import { Colophon, IndexCard, InkButton, PostIt, Sheet, Stamp } from '@/ui'
 import { shuffle } from '@/utils/shuffle'
+import { FeedbackScreen } from '../feedback/FeedbackScreen'
 import './EasyMode.scss'
-
-type EasyModeProps = {
-  onBack: () => void
-}
 
 const CHOICE_TONES = ['yellow', 'pink', 'blue', 'green'] as const
 const CHOICE_MARKERS = ['A', 'B', 'C', 'D'] as const
@@ -28,7 +27,8 @@ const randomEasyQuery = {
   refetchOnMount: false,
 } as const
 
-export function EasyMode({ onBack }: EasyModeProps) {
+export function EasyMode() {
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [gradedPuzzle, setGradedPuzzle] = useState<PuzzlePrompt>()
@@ -39,6 +39,14 @@ export function EasyMode({ onBack }: EasyModeProps) {
       solveEasyPuzzle(id, choiceId),
     onSuccess: () => {
       clearEasyPuzzleLock()
+      queryClient.removeQueries({ queryKey: puzzleKeys.randomEasy })
+    },
+    onError: (error) => {
+      if (!isPuzzleNotFound(error)) {
+        return
+      }
+      setGradedPuzzle(undefined)
+      setSelectedId(null)
       queryClient.removeQueries({ queryKey: puzzleKeys.randomEasy })
     },
   })
@@ -67,7 +75,7 @@ export function EasyMode({ onBack }: EasyModeProps) {
         : 'Could not submit that answer.')
       : selectedId
         ? 'Submit when you are sure.'
-        : 'Pick a meaning, then submit.'
+        : 'Pick an answer!'
 
   function handleNext() {
     setGradedPuzzle(undefined)
@@ -111,38 +119,6 @@ export function EasyMode({ onBack }: EasyModeProps) {
     )
   }
 
-  function renderReveal() {
-    return (
-      <section className="reveal" aria-live="polite">
-        {solved ? (
-          <p className={`verdict ${solveMutation.data?.correct ? 'ok' : 'no'}`}>
-            {solveMutation.data?.correct
-              ? 'Correct! '
-              : "Unfortunately, that's not correct..."}
-          </p>
-        ) : (
-          <p className="verdict pending">Checking the archive…</p>
-        )}
-        {solveMutation.data?.goldGraph ? (
-          <EtymologyGraph
-            graph={solveMutation.data.goldGraph}
-            leafA={puzzle?.leafA}
-            leafB={puzzle?.leafB}
-          />
-        ) : (
-          <div className="graphPlaceholder" aria-busy="true" />
-        )}
-        {solved ? (
-          <div className="nextRow">
-            <Stamp onClick={handleNext} aria-label="Load the next puzzle">
-              Next
-            </Stamp>
-          </div>
-        ) : null}
-      </section>
-    )
-  }
-
   function renderChoices() {
     return (
       <section className="choices" aria-label="Meaning choices">
@@ -181,7 +157,7 @@ export function EasyMode({ onBack }: EasyModeProps) {
         {loadError ? (
           <Stamp
             hint={stampHint}
-            hintPlacement="right"
+            hintPlacement="left"
             onClick={() => {
               void puzzleQuery.refetch()
             }}
@@ -192,7 +168,7 @@ export function EasyMode({ onBack }: EasyModeProps) {
         ) : (
           <Stamp
             hint={stampHint}
-            hintPlacement="right"
+            hintPlacement="left"
             disabled={!puzzle || !selectedId || solveMutation.isPending}
             aria-label="Submit answer"
             onClick={() => {
@@ -214,7 +190,7 @@ export function EasyMode({ onBack }: EasyModeProps) {
   return (
     <Sheet as="main" tone="paper" className="easyMode">
       <header className="header">
-        <InkButton variant="ghost" onClick={onBack}>
+        <InkButton variant="ghost" onClick={() => navigate('/')}>
           ← Home
         </InkButton>
         <p className="brand">EtymoGuessr</p>
@@ -223,7 +199,14 @@ export function EasyMode({ onBack }: EasyModeProps) {
 
       {revealing ? null : renderPrompt()}
 
-      {revealing ? renderReveal() : (
+      {revealing ? (
+        <FeedbackScreen
+          result={solveMutation.data}
+          leafA={puzzle?.leafA}
+          leafB={puzzle?.leafB}
+          onNext={handleNext}
+        />
+      ) : (
         <div className="playRow">
           {renderChoices()}
           {renderSubmit()}

@@ -74,6 +74,7 @@ type Puzzle struct {
 type Filter struct {
 	LangPair   string
 	MinQuality *int
+	MinNodes   *int
 }
 
 type Store interface {

@@ -1,0 +1,158 @@
+@use '../../styles/breakpoints' as bp;
+
+@keyframes hard-mode-settle {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.hardMode {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-height: 100vh;
+  padding: var(--page-gutter);
+  animation: hard-mode-settle var(--duration-med) var(--ease-paper) both;
+
+  .header {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: baseline;
+    gap: var(--space-3);
+    padding-bottom: var(--space-3);
+    border-bottom: 1px solid var(--rule);
+
+    > :first-child {
+      justify-self: start;
+    }
+  }
+
+  .brand {
+    margin: 0;
+    justify-self: center;
+    font-family: var(--font-mono);
+    font-size: var(--text-lg);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--ink);
+  }
+
+  .mode {
+    margin: 0;
+    justify-self: end;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  .instruction {
+    margin: 0 auto;
+    text-align: center;
+    font-family: var(--font-serif);
+    font-size: var(--text-base);
+    color: var(--ink-muted);
+  }
+
+  .hardPlay {
+    display: grid;
+    grid-template-columns: minmax(11rem, 16rem) minmax(0, 1fr);
+    gap: var(--space-5);
+    align-items: start;
+    width: 100%;
+  }
+
+  .palette {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .sectionLabel {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  .notes {
+    display: grid;
+    gap: var(--space-3);
+  }
+
+  .paletteLang {
+    display: block;
+    margin-bottom: 0.35rem;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+  }
+
+  .paletteHint {
+    margin: 0;
+    font-family: var(--font-serif);
+    font-size: var(--text-xs);
+    color: var(--ink-muted);
+  }
+
+  .hardBoard {
+    position: relative;
+    min-height: 20rem;
+    height: min(28rem, 48vh);
+  }
+
+  .emptyBoard {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: grid;
+    place-items: center;
+    margin: 0;
+    pointer-events: none;
+    font-family: var(--font-serif);
+    font-size: var(--text-sm);
+    color: var(--ink-faint);
+  }
+
+  .graphPlaceholder {
+    width: 100%;
+    height: min(28rem, 48vh);
+    min-height: 16rem;
+    background: var(--paper-blotter);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+  }
+
+  .submit {
+    margin-top: var(--space-3);
+    display: flex;
+    justify-content: flex-end;
+    width: 100%;
+  }
+
+  .etymologyGraph.hardBoard .react-flow__node.draggable {
+    cursor: grab;
+  }
+
+  @include bp.below-desktop {
+    .hardPlay {
+      grid-template-columns: 1fr;
+    }
+
+    .instruction {
+      max-width: none;
+      text-align: left;
+    }
+  }
+}

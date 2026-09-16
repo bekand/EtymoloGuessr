@@ -1,11 +1,10 @@
+import { useNavigate } from 'react-router-dom'
 import { Colophon, Sheet, Stamp } from '@/ui'
 import './HomeScreen.scss'
 
-type HomeScreenProps = {
-  onEasy: () => void
-}
+export function HomeScreen() {
+  const navigate = useNavigate()
 
-export function HomeScreen({ onEasy }: HomeScreenProps) {
   return (
     <main className="homeScreen">
       <div className="atmosphere" aria-hidden="true" />
@@ -14,15 +13,15 @@ export function HomeScreen({ onEasy }: HomeScreenProps) {
         <p className="brand">EtymoGuessr</p>
         <h1 className="headline">Trace two words to one ancestor.</h1>
         <div className="actions">
-          <Stamp size="lg" onClick={onEasy} aria-label="Play Easy mode">
+          <Stamp size="lg" onClick={() => navigate('/easy')} aria-label="Play Easy mode">
             Easy
           </Stamp>
-          <Stamp size="lg" disabled aria-label="Hard mode coming soon">
+          <Stamp size="lg" onClick={() => navigate('/hard')} aria-label="Play Hard mode">
             Hard
           </Stamp>
         </div>
         <p className="note">
-          Easy mode serves a live puzzle. Hard is still on the way.
+          Easy: pick the shared ancestor meaning. Hard: place every word and draw the ink.
         </p>
       </Sheet>
       <Colophon />

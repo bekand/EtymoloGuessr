@@ -37,15 +37,15 @@
     transform: translateX(-50%) translateY(0);
   }
 
-  &.right .hint {
+  &.left .hint {
     top: 50%;
-    left: calc(100% + 1rem);
-    text-align: left;
-    transform: translateY(-50%) translateX(-2px);
+    right: calc(100% + 1rem);
+    text-align: right;
+    transform: translateY(-50%) translateX(2px);
   }
 
-  &.right:hover .hint,
-  &.right:focus-within .hint {
+  &.left:hover .hint,
+  &.left:focus-within .hint {
     opacity: 1;
     transform: translateY(-50%) translateX(0);
   }

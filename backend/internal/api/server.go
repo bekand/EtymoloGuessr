@@ -12,6 +12,8 @@ import (
 	"github.com/bekand/EtymoGuessr/backend/internal/puzzle"
 )
 
+const minHardModeNodes = 4
+
 type Server struct {
 	store  puzzle.Store
 	logger *slog.Logger
@@ -27,6 +29,7 @@ func New(store puzzle.Store, cfg config.Config, logger *slog.Logger) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.handleHealth)
 	mux.HandleFunc("GET /puzzles/random", s.handleRandom)
+	mux.HandleFunc("GET /puzzles/{id}", s.handleGet)
 	mux.HandleFunc("POST /puzzles/{id}/solve", s.handleSolve)
 	s.mux = withCORS(cfg.CORSOrigins, mux)
 	return s
@@ -65,6 +68,10 @@ func (s *Server) handleRandom(w http.ResponseWriter, r *http.Request) {
 		}
 		filter.MinQuality = &n
 	}
+	if mode == puzzle.ModeHard {
+		n := minHardModeNodes
+		filter.MinNodes = &n
+	}
 	p, err := s.store.RandomPuzzle(r.Context(), filter)
 	if errors.Is(err, puzzle.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "no enabled puzzles")
@@ -73,6 +80,38 @@ func (s *Server) handleRandom(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.logger.Error("random puzzle", "err", err)
 		writeError(w, http.StatusInternalServerError, "failed to load puzzle")
+		return
+	}
+	if !eligibleForMode(p, mode) {
+		writeError(w, http.StatusNotFound, "no enabled puzzles")
+		return
+	}
+	writeJSON(w, http.StatusOK, promptPayload(p, mode))
+}
+
+func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "missing puzzle id")
+		return
+	}
+	mode, err := puzzle.ParseMode(r.URL.Query().Get("mode"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	p, err := s.store.GetPuzzle(r.Context(), id)
+	if errors.Is(err, puzzle.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "puzzle not found")
+		return
+	}
+	if err != nil {
+		s.logger.Error("get puzzle", "err", err)
+		writeError(w, http.StatusInternalServerError, "failed to load puzzle")
+		return
+	}
+	if !eligibleForMode(p, mode) {
+		writeError(w, http.StatusNotFound, "puzzle not found")
 		return
 	}
 	writeJSON(w, http.StatusOK, promptPayload(p, mode))
@@ -146,6 +185,16 @@ type promptResponse struct {
 	LeafB       json.RawMessage `json:"leafB"`
 	Choices     []puzzle.Choice `json:"choices"`
 	PromptGraph *puzzle.Graph   `json:"promptGraph,omitempty"`
+}
+
+func eligibleForMode(p *puzzle.Puzzle, mode puzzle.Mode) bool {
+	if p == nil {
+		return false
+	}
+	if mode == puzzle.ModeHard && len(p.AnswerGraph.Nodes) < minHardModeNodes {
+		return false
+	}
+	return true
 }
 
 func promptPayload(p *puzzle.Puzzle, mode puzzle.Mode) promptResponse {

@@ -60,4 +60,13 @@
     border: none;
     background: transparent;
   }
+
+  &.connectable .react-flow__handle {
+    width: 10px;
+    height: 10px;
+    opacity: 1;
+    pointer-events: auto;
+    border: 1px solid var(--ink-muted);
+    background: var(--paper);
+  }
 }

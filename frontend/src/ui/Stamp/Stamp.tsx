@@ -2,7 +2,7 @@ import type { ButtonHTMLAttributes, ReactNode } from 'react'
 import { useId } from 'react'
 import './Stamp.scss'
 
-type HintPlacement = 'bottom' | 'right'
+type HintPlacement = 'bottom' | 'left'
 
 type StampProps = {
   children: ReactNode

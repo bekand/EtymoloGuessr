@@ -35,6 +35,7 @@ export type PuzzlePrompt = {
   leafA: Term
   leafB: Term
   choices: Choice[]
+  promptGraph?: Graph
 }
 
 export type SolveResponse = {

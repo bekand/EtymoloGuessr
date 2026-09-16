@@ -30,13 +30,14 @@ FROM puzzles
 WHERE enabled = true
   AND ($1::text IS NULL OR lang_pair = $1)
   AND ($2::int IS NULL OR quality_score >= $2)
+  AND ($3::int IS NULL OR jsonb_array_length(COALESCE(answer_graph->'nodes', '[]'::jsonb)) >= $3)
 ORDER BY random()
 LIMIT 1`
 	var langPair *string
 	if filter.LangPair != "" {
 		langPair = &filter.LangPair
 	}
-	return s.scanOne(ctx, q, langPair, filter.MinQuality)
+	return s.scanOne(ctx, q, langPair, filter.MinQuality, filter.MinNodes)
 }
 
 func (s *Store) GetPuzzle(ctx context.Context, id string) (*puzzle.Puzzle, error) {

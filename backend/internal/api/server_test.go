@@ -28,6 +28,9 @@ func (m *memStore) RandomPuzzle(_ context.Context, filter puzzle.Filter) (*puzzl
 		if filter.MinQuality != nil && p.QualityScore < *filter.MinQuality {
 			continue
 		}
+		if filter.MinNodes != nil && len(p.AnswerGraph.Nodes) < *filter.MinNodes {
+			continue
+		}
 		return p, nil
 	}
 	return nil, puzzle.ErrNotFound
@@ -72,15 +75,42 @@ func fixturePuzzle() *puzzle.Puzzle {
 	}
 }
 
-func testHandler() http.Handler {
+func fixtureHardPuzzle() *puzzle.Puzzle {
+	gloss := "a male parent"
 	p := fixturePuzzle()
-	return New(&memStore{puzzles: map[string]*puzzle.Puzzle{p.ID: p}}, config.Config{
+	p.ID = "def456def456def456"
+	p.AnswerGraph = puzzle.Graph{
+		Nodes: []puzzle.Node{
+			{ID: "English:father", Lang: "English", Term: "father", Role: "leaf"},
+			{ID: "German:Vater", Lang: "German", Term: "Vater", Role: "leaf"},
+			{ID: "Proto-Germanic:*fader", Lang: "Proto-Germanic", Term: "*fader", Gloss: &gloss, Role: "ancestor"},
+			{ID: "Proto-Indo-European:*ph2ter", Lang: "Proto-Indo-European", Term: "*ph₂tḗr", Gloss: &gloss, Role: "ancestor"},
+		},
+		Edges: []puzzle.Edge{
+			{From: "English:father", To: "Proto-Germanic:*fader"},
+			{From: "German:Vater", To: "Proto-Germanic:*fader"},
+			{From: "Proto-Germanic:*fader", To: "Proto-Indo-European:*ph2ter"},
+		},
+	}
+	return p
+}
+
+func testHandlerWith(puzzles ...*puzzle.Puzzle) http.Handler {
+	byID := make(map[string]*puzzle.Puzzle, len(puzzles))
+	for _, p := range puzzles {
+		byID[p.ID] = p
+	}
+	return New(&memStore{puzzles: byID}, config.Config{
 		CORSOrigins: []string{"http://localhost:5173"},
 	}, nil)
 }
 
+func testHandler() http.Handler {
+	return testHandlerWith(fixturePuzzle())
+}
+
 func TestRandomHardKeepsAncestorsWithoutGloss(t *testing.T) {
-	srv := httptest.NewServer(testHandler())
+	srv := httptest.NewServer(testHandlerWith(fixtureHardPuzzle()))
 	defer srv.Close()
 
 	res, err := http.Get(srv.URL + "/puzzles/random?mode=hard")
@@ -112,6 +142,93 @@ func TestRandomHardKeepsAncestorsWithoutGloss(t *testing.T) {
 	}
 	if !foundAncestor {
 		t.Fatal("hard prompt should include ancestor nodes")
+	}
+	if len(payload.PromptGraph.Nodes) < minHardModeNodes {
+		t.Fatalf("hard prompt should have at least %d nodes, got %d", minHardModeNodes, len(payload.PromptGraph.Nodes))
+	}
+}
+
+func TestRandomHardRejectsFewerThanFourNodes(t *testing.T) {
+	srv := httptest.NewServer(testHandlerWith(fixturePuzzle()))
+	defer srv.Close()
+
+	res, err := http.Get(srv.URL + "/puzzles/random?mode=hard")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusNotFound {
+		t.Fatalf("status %d", res.StatusCode)
+	}
+	var body map[string]string
+	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body["error"] != "no enabled puzzles" {
+		t.Fatalf("error %q", body["error"])
+	}
+}
+
+func TestRandomHardServesFourNodePuzzleAmongSmallerOnes(t *testing.T) {
+	small := fixturePuzzle()
+	large := fixtureHardPuzzle()
+	srv := httptest.NewServer(testHandlerWith(small, large))
+	defer srv.Close()
+
+	res, err := http.Get(srv.URL + "/puzzles/random?mode=hard")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status %d", res.StatusCode)
+	}
+	var payload promptResponse
+	if err := json.NewDecoder(res.Body).Decode(&payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.ID != large.ID {
+		t.Fatalf("id %q, want four-node puzzle %q", payload.ID, large.ID)
+	}
+	if payload.PromptGraph == nil || len(payload.PromptGraph.Nodes) < minHardModeNodes {
+		t.Fatal("hard prompt should include at least four nodes")
+	}
+}
+
+func TestGetHardRejectsFewerThanFourNodes(t *testing.T) {
+	p := fixturePuzzle()
+	srv := httptest.NewServer(testHandlerWith(p))
+	defer srv.Close()
+
+	res, err := http.Get(srv.URL + "/puzzles/" + p.ID + "?mode=hard")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusNotFound {
+		t.Fatalf("status %d", res.StatusCode)
+	}
+}
+
+func TestGetHardServesFourNodePuzzle(t *testing.T) {
+	p := fixtureHardPuzzle()
+	srv := httptest.NewServer(testHandlerWith(p))
+	defer srv.Close()
+
+	res, err := http.Get(srv.URL + "/puzzles/" + p.ID + "?mode=hard")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status %d", res.StatusCode)
+	}
+	var payload promptResponse
+	if err := json.NewDecoder(res.Body).Decode(&payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.PromptGraph == nil || len(payload.PromptGraph.Nodes) != 4 {
+		t.Fatal("hard GET should return a four-node prompt graph")
 	}
 }
 
@@ -204,6 +321,52 @@ func TestCORSPreflight(t *testing.T) {
 	}
 	if got := res.Header.Get("Access-Control-Allow-Origin"); got != "http://localhost:5173" {
 		t.Fatalf("cors origin %q", got)
+	}
+}
+
+func TestGetPuzzleByID(t *testing.T) {
+	srv := httptest.NewServer(testHandler())
+	defer srv.Close()
+	id := fixturePuzzle().ID
+
+	res, err := http.Get(srv.URL + "/puzzles/" + id + "?mode=easy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status %d", res.StatusCode)
+	}
+	var payload promptResponse
+	if err := json.NewDecoder(res.Body).Decode(&payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.ID != id {
+		t.Fatalf("id %q", payload.ID)
+	}
+	if payload.PromptGraph != nil {
+		t.Fatal("easy GET by id should omit promptGraph")
+	}
+}
+
+func TestGetPuzzleNotFound(t *testing.T) {
+	srv := httptest.NewServer(testHandler())
+	defer srv.Close()
+
+	res, err := http.Get(srv.URL + "/puzzles/missing-id?mode=hard")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusNotFound {
+		t.Fatalf("status %d", res.StatusCode)
+	}
+	var body map[string]string
+	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body["error"] != "puzzle not found" {
+		t.Fatalf("error %q", body["error"])
 	}
 }
 

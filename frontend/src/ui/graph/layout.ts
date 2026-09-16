@@ -3,9 +3,9 @@ import { Position, type Edge, type Node } from '@xyflow/react'
 
 export const NODE_WIDTH = 176
 export const NODE_HEIGHT = 124
-const H_GAP = 40
-const V_GAP = 96
-const PAD = 24
+export const H_GAP = 40
+export const V_GAP = 96
+export const PAD = 24
 
 export type EtymologyNodeData = {
   lang: string
@@ -84,7 +84,7 @@ function longestPathFromLeaves(graph: Graph): Map<string, number> {
   return rank
 }
 
-function sortLeaves(nodes: GraphNode[], leafA?: Term, leafB?: Term): GraphNode[] {
+export function sortLeaves(nodes: GraphNode[], leafA?: Term, leafB?: Term): GraphNode[] {
   const aId = leafA ? nodeKey(leafA) : undefined
   const bId = leafB ? nodeKey(leafB) : undefined
 
