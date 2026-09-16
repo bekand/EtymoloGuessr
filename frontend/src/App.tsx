@@ -16,7 +16,5 @@ export default function App() {
     return <HardStub onBack={() => setScreen('home')} />
   }
 
-  return (
-    <HomeScreen onEasy={() => setScreen('easy')} onHard={() => setScreen('hard')} />
-  )
+  return <HomeScreen onEasy={() => setScreen('easy')} />
 }

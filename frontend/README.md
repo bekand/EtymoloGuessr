@@ -29,11 +29,11 @@ src/
   styles/          # tokens + global CSS
   ui/              # Sheet, IndexCard, PostIt, InkButton, Stamp, Colophon
   features/
-    home/          # brand desk + Easy / Hard entry
+    home/          # Home sheet + Easy / Hard entry
     easy/          # placeholder two-card + four-post-it shell
     hard/          # coming-soon stub
 ```
 
 ## Design notes
 
-Cream paper desk, graphite ink, low-sat post-its, stamp-red actions. Attribution colophon (CC BY-SA / Wiktionary + etymology-db) on every screen.
+Light paper sheets, darker ink, low-sat post-its, rectangular stamp actions. Attribution colophon (CC BY-SA / Wiktionary + etymology-db) on every screen. Hard entry is disabled until that mode ships.

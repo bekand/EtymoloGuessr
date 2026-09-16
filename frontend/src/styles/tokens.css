@@ -1,26 +1,26 @@
 :root {
-  /* Paper — cream desk, not pure white */
-  --paper: #e8dfd0;
-  --paper-ruled: #efe7d8;
-  --paper-kraft: #d4c4a8;
-  --paper-blotter: #cbb89a;
-  --desk: #9a8468;
+  /* Paper — light cream, not pure white */
+  --paper: #f7f2e9;
+  --paper-ruled: #faf6ef;
+  --paper-kraft: #ebe3d4;
+  --paper-blotter: #efe8dc;
+  --surface: #e9e1d3;
 
-  /* Ink — near-black / graphite */
-  --ink: #1a1714;
-  --ink-muted: #4a453f;
-  --ink-faint: #7a7369;
-  --rule: #b8a990;
+  /* Ink — darker graphite for contrast on light paper */
+  --ink: #100e0c;
+  --ink-muted: #2e2a26;
+  --ink-faint: #5a544c;
+  --rule: #cfc4b2;
 
   /* Post-it accents — low saturation */
-  --note-yellow: #e8d99a;
-  --note-pink: #e4c4c0;
-  --note-blue: #c5d2d8;
-  --note-green: #c8d4b8;
+  --note-yellow: #efe4ad;
+  --note-pink: #edd0cc;
+  --note-blue: #d0dde3;
+  --note-green: #d3dec4;
 
   /* Stamp — primary actions, used sparingly */
-  --stamp-red: #8b2e2e;
-  --stamp-red-soft: rgba(139, 46, 46, 0.12);
+  --stamp-red: #7a2424;
+  --stamp-red-soft: rgba(122, 36, 36, 0.14);
 
   /* Type */
   --font-mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Code', monospace;
@@ -47,6 +47,8 @@
   --stack-offset: 2px;
   --tilt-soft: -0.6deg;
   --tilt-alt: 0.8deg;
+  --stamp-tilt: -1.5deg;
+  --stamp-tilt-hover: -3.5deg;
 
   --ease-paper: cubic-bezier(0.22, 1, 0.36, 1);
   --duration-fast: 160ms;

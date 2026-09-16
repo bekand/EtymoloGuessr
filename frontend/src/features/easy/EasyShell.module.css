@@ -54,7 +54,9 @@
 .prompt {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: var(--space-4);
+  text-align: center;
 }
 
 .instruction {
@@ -69,6 +71,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
   gap: var(--space-4);
 }
 
@@ -78,10 +81,18 @@
   color: var(--ink-faint);
 }
 
+.playRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-6);
+  align-items: end;
+}
+
 .choices {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  min-width: 0;
 }
 
 .sectionLabel {
@@ -95,21 +106,24 @@
 
 .notes {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-3);
+  max-width: 28rem;
 }
 
 .submit {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   align-items: center;
-  gap: var(--space-5);
-  padding-top: var(--space-2);
+  justify-content: flex-end;
+  gap: var(--space-3);
+  padding-bottom: var(--space-1);
 }
 
 .waitNote {
   margin: 0;
-  max-width: 28ch;
+  max-width: 14ch;
+  text-align: center;
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   letter-spacing: 0.03em;
@@ -127,7 +141,20 @@
     justify-self: start;
   }
 
-  .notes {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .playRow {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .submit {
+    align-items: flex-end;
+    flex-direction: row;
+    justify-content: flex-end;
+    gap: var(--space-4);
+  }
+
+  .waitNote {
+    text-align: left;
+    max-width: 18ch;
   }
 }

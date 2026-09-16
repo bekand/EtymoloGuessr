@@ -10,7 +10,7 @@ export function HardStub({ onBack }: HardStubProps) {
     <Sheet as="main" tone="kraft" className={styles.stub}>
       <header className={styles.header}>
         <InkButton variant="ghost" onClick={onBack}>
-          ← Desk
+          ← Home
         </InkButton>
         <p className={styles.brand}>EtymoGuessr</p>
       </header>

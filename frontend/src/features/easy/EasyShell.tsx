@@ -9,10 +9,10 @@ const NOTE_TONES = ['yellow', 'pink', 'blue', 'green'] as const
 
 export function EasyShell({ onBack }: EasyShellProps) {
   return (
-    <Sheet as="main" tone="blotter" className={styles.shell}>
+    <Sheet as="main" tone="paper" className={styles.shell}>
       <header className={styles.header}>
         <InkButton variant="ghost" onClick={onBack}>
-          ← Desk
+          ← Home
         </InkButton>
         <p className={styles.brand}>EtymoGuessr</p>
         <p className={styles.mode}>Easy · shell</p>
@@ -31,23 +31,25 @@ export function EasyShell({ onBack }: EasyShellProps) {
         </div>
       </section>
 
-      <section className={styles.choices} aria-label="Meaning choices placeholders">
-        <p className={styles.sectionLabel}>Choose one</p>
-        <div className={styles.notes}>
-          {NOTE_TONES.map((tone) => (
-            <PostIt key={tone} tone={tone} placeholder disabled aria-label={`Choice ${tone}`} />
-          ))}
-        </div>
-      </section>
+      <div className={styles.playRow}>
+        <section className={styles.choices} aria-label="Meaning choices placeholders">
+          <p className={styles.sectionLabel}>Choose one</p>
+          <div className={styles.notes}>
+            {NOTE_TONES.map((tone) => (
+              <PostIt key={tone} tone={tone} placeholder disabled aria-label={`Choice ${tone}`} />
+            ))}
+          </div>
+        </section>
 
-      <section className={styles.submit} aria-label="Submit area">
-        <Stamp disabled aria-label="Submit answer (unavailable until API)">
-          Submit
-        </Stamp>
-        <p className={styles.waitNote}>
-          Layout only — puzzle fetch waits on the Go API. No mock data.
-        </p>
-      </section>
+        <section className={styles.submit} aria-label="Submit area">
+          <Stamp disabled aria-label="Submit answer (unavailable until API)">
+            Submit
+          </Stamp>
+          <p className={styles.waitNote}>
+            Layout only — puzzle fetch waits on the Go API. No mock data.
+          </p>
+        </section>
+      </div>
 
       <Colophon />
     </Sheet>

@@ -18,7 +18,9 @@ export function Stamp({
 
   return (
     <button type={type} className={classes} {...rest}>
-      <span className={styles.ring}>{children}</span>
+      <span className={styles.plate}>
+        <span className={styles.label}>{children}</span>
+      </span>
     </button>
   )
 }
