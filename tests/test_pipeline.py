@@ -11,7 +11,9 @@ from etl.generate import (
     gloss_overlap,
     is_proper_noun_leaf,
     leaf_reuse_key,
+    leaf_shares_lca_label,
     make_choices,
+    normalize_label,
     quality_score,
     still_same_meaning,
 )
@@ -47,6 +49,15 @@ def test_gloss_overlap_and_still_same_meaning():
     assert still_same_meaning("Gift", "a gift; something given")
     assert not still_same_meaning("gift", "poison; a toxic substance")
     assert not still_same_meaning("the", "the ancestor sense")
+
+
+def test_leaf_shares_lca_label():
+    assert normalize_label("*Gift") == "gift"
+    assert leaf_shares_lca_label("gift", "present", "gift", "something given")
+    assert leaf_shares_lca_label("Gift", "present", "*gift", "something given")
+    assert leaf_shares_lca_label("poison", "a toxic substance", "*giftiz", "a toxic substance")
+    assert leaf_shares_lca_label("hound", "dog", "*hundaz", "hound")
+    assert not leaf_shares_lca_label("gift", "present", "*giftiz", "poison")
 
 
 def test_puzzle_id_order_invariant():
@@ -253,6 +264,71 @@ def test_extract_candidates_rejects_leaf_term_in_lca_gloss():
     cands = extract_candidates(g, glosses, _two_leaf_lca_cfg(), funnel)
     assert cands == []
     assert funnel.counts.get("same_meaning", 0) >= 1
+    assert funnel.counts.get("candidates", 0) == 0
+
+
+@pytest.mark.parametrize(
+    "leaf_a,leaf_b,lca_term,glosses,reason",
+    [
+        (
+            ("gift", "English"),
+            ("Gift", "German"),
+            "*giftiz",
+            {
+                "English\tgift": "present",
+                "German\tGift": "poison",
+                "Proto-Germanic\t*giftiz": "present",
+            },
+            "leaf gloss equals LCA gloss",
+        ),
+        (
+            ("gift", "English"),
+            ("Gift", "German"),
+            "gift",
+            {
+                "English\tgift": "modern sense alpha zebra",
+                "German\tGift": "modern sense beta quartz",
+                "Proto-Germanic\tgift": "ancient root poison venom",
+            },
+            "leaf term equals LCA term",
+        ),
+        (
+            ("hound", "English"),
+            ("Hund", "German"),
+            "*hundaz",
+            {
+                "English\thound": "a hunting dog",
+                "German\tHund": "a domestic animal",
+                "Proto-Germanic\t*hundaz": "hound",
+            },
+            "leaf term equals LCA gloss",
+        ),
+        (
+            ("gift", "English"),
+            ("Gift", "German"),
+            "*giftiz",
+            {
+                "English\tgift": "giftiz",
+                "German\tGift": "modern sense beta quartz",
+                "Proto-Germanic\t*giftiz": "ancient root poison venom",
+            },
+            "leaf gloss equals LCA term",
+        ),
+    ],
+)
+def test_extract_candidates_rejects_leaf_equal_to_lca(leaf_a, leaf_b, lca_term, glosses, reason):
+    """Hard-reject when a leaf term or gloss is identical to the LCA term or gloss."""
+    term_a, lang_a = leaf_a
+    term_b, lang_b = leaf_b
+    rows = [
+        dict(term=term_a, lang=lang_a, reltype="inherited_from", related_term=lca_term, related_lang="Proto-Germanic"),
+        dict(term=term_b, lang=lang_b, reltype="inherited_from", related_term=lca_term, related_lang="Proto-Germanic"),
+    ]
+    g = build_graph(pd.DataFrame(rows), {"inherited_from"})
+    funnel = Funnel()
+    cands = extract_candidates(g, glosses, _two_leaf_lca_cfg(), funnel)
+    assert cands == [], reason
+    assert funnel.counts.get("lca_equals_leaf", 0) >= 1, reason
     assert funnel.counts.get("candidates", 0) == 0
 
 

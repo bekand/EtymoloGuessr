@@ -152,7 +152,9 @@ def truncate_puzzles() -> None:
     with connect() as conn:
         if not puzzles_table_exists(conn):
             raise SystemExit("puzzles table is missing - run Go migrations first (etl doctor)")
-        conn.execute("TRUNCATE TABLE puzzles")
+        # scores.puzzle_id references puzzles, so Postgres refuses TRUNCATE puzzles
+        # even when scores is empty. Truncate both; keep the tables and users.
+        conn.execute("TRUNCATE TABLE scores, puzzles")
         conn.commit()
 
 

@@ -98,6 +98,28 @@ def still_same_meaning(leaf_term: str | None, gloss: str | None) -> bool:
     return bool(term_tok & tokenize(gloss))
 
 
+def normalize_label(text: str | None) -> str:
+    """Casefold a term or gloss for identity checks; strip a reconstruction *."""
+    if not text:
+        return ""
+    s = text.strip().casefold()
+    if s.startswith("*"):
+        s = s[1:].lstrip()
+    return s
+
+
+def leaf_shares_lca_label(
+    leaf_term: str | None,
+    leaf_gloss: str | None,
+    lca_term: str | None,
+    lca_gloss: str | None,
+) -> bool:
+    """True when a leaf term or gloss is identical to the LCA term or gloss."""
+    leaf_labels = {normalize_label(leaf_term), normalize_label(leaf_gloss)} - {""}
+    lca_labels = {normalize_label(lca_term), normalize_label(lca_gloss)} - {""}
+    return bool(leaf_labels & lca_labels)
+
+
 def lang_pair_code(lang_a: str, lang_b: str, leaf_codes: dict[str, str]) -> str:
     ca, cb = leaf_codes[lang_a], leaf_codes[lang_b]
     return "-".join(sorted([ca, cb]))
@@ -317,6 +339,12 @@ def extract_candidates(
             funnel.bump("no_gloss")
             continue
 
+        if leaf_shares_lca_label(term_a, gloss_a, lca_term, lca_gloss) or leaf_shares_lca_label(
+            term_b, gloss_b, lca_term, lca_gloss
+        ):
+            funnel.bump("lca_equals_leaf")
+            continue
+
         if still_same_meaning(term_a, lca_gloss) and still_same_meaning(term_b, lca_gloss):
             funnel.bump("same_meaning")
             continue
@@ -324,11 +352,7 @@ def extract_candidates(
             funnel.bump("same_meaning")
             continue
 
-        high_overlap = (
-            still_same_meaning(term_a, lca_gloss)
-            or still_same_meaning(term_b, lca_gloss)
-            or gloss_overlap(gloss_a, gloss_b) >= max_overlap
-        )
+        high_overlap = still_same_meaning(term_a, lca_gloss) or still_same_meaning(term_b, lca_gloss)
 
         key = tuple(sorted([leaf_a_id, leaf_b_id]) + [chosen])
         if key in seen_pairs:

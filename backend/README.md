@@ -150,7 +150,7 @@ HTTP tests use an in-memory store. Scoring and prompt stripping are unit-tested 
 
 SQL files in `internal/db/migrations/` are embedded in the binary and applied in filename order. Applied versions go in `schema_migrations`. Files may use `-- +goose Up` / `-- +goose Down` markers; only the **Up** section is executed. Down exists for documentation / a future CLI, not for boot.
 
-Do not `DROP DATABASE` from ETL. `etl reset --puzzles` truncates puzzle rows only.
+Do not `DROP DATABASE` from ETL. `etl reset --puzzles` truncates `puzzles` and `scores` (FK) but never drops those tables or `users`.
 
 ## License
 

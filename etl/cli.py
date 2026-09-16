@@ -145,8 +145,8 @@ def reset(
     if puzzles:
         try:
             truncate_puzzles()
-            typer.echo("truncated puzzles table")
-        except SystemExit as exc:
+            typer.echo("truncated puzzles and scores tables")
+        except (SystemExit, Exception) as exc:
             typer.echo(f"skip db truncate: {exc}", err=True)
         reset_data(puzzles=True)
 
