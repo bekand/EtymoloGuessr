@@ -35,7 +35,11 @@ export function PostIt({
   return (
     <button type={type} className={classes} aria-pressed={selected} {...rest}>
       {marker ? <span className="marker">{marker}</span> : null}
-      {placeholder && !children ? <span className="lines" aria-hidden="true" /> : children}
+      {placeholder && !children ? (
+        <span className="lines" aria-hidden="true" />
+      ) : (
+        <span className="body">{children}</span>
+      )}
     </button>
   )
 }

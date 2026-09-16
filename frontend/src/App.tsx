@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { EasyShell } from '@/features/easy/EasyShell'
+import { EasyMode } from '@/features/easy/EasyMode'
 import { HardStub } from '@/features/hard/HardStub'
 import { HomeScreen } from '@/features/home/HomeScreen'
 
@@ -9,7 +9,7 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>('home')
 
   if (screen === 'easy') {
-    return <EasyShell onBack={() => setScreen('home')} />
+    return <EasyMode onBack={() => setScreen('home')} />
   }
 
   if (screen === 'hard') {

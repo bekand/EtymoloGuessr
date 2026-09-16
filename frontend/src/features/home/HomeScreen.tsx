@@ -22,7 +22,7 @@ export function HomeScreen({ onEasy }: HomeScreenProps) {
           </Stamp>
         </div>
         <p className="note">
-          Puzzle data arrives with the Go API — shells only for now.
+          Easy mode serves a live puzzle. Hard is still on the way.
         </p>
       </Sheet>
       <Colophon />

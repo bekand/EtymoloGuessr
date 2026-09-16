@@ -1,14 +1,65 @@
+.indexCardUnit {
+  display: flex;
+  align-items: center;
+  gap: 0;
+
+  .meaning {
+    flex: 0 0 auto;
+    max-width: 0;
+    margin: 0;
+    overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      max-width var(--duration-med) var(--ease-paper),
+      margin var(--duration-med) var(--ease-paper),
+      opacity var(--duration-med) var(--ease-paper);
+  }
+
+  .meaningText {
+    margin: 0;
+    width: 16ch;
+    font-family: var(--font-serif);
+    font-size: var(--text-sm);
+    font-style: italic;
+    line-height: 1.4;
+    color: var(--ink-muted);
+  }
+
+  .meaning.open {
+    max-width: 16ch;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  &.left .meaningText {
+    text-align: right;
+  }
+
+  &.left .meaning.open {
+    margin-right: var(--space-3);
+  }
+
+  &.right .meaningText {
+    text-align: left;
+  }
+
+  &.right .meaning.open {
+    margin-left: var(--space-3);
+  }
+}
+
 .indexCard {
   position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  min-width: 10rem;
-  max-width: 16rem;
+  width: 14rem;
   min-height: 7.5rem;
   padding: var(--space-4) var(--space-4) var(--space-5);
   background: var(--paper-ruled);
   border: 1px solid var(--rule);
+  border-radius: 2px;
   box-shadow: var(--stack-offset) var(--stack-offset) 0 rgba(26, 23, 20, 0.1);
 
   &.placeholder {
@@ -22,7 +73,6 @@
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--ink-muted);
-    border: 1px solid var(--ink-muted);
     padding: 0.15rem 0.4rem;
     line-height: 1;
   }
@@ -37,12 +87,29 @@
     color: var(--ink);
   }
 
-  .gloss {
-    margin: 0;
-    font-family: var(--font-serif);
-    font-size: var(--text-sm);
-    color: var(--ink-muted);
-    font-style: italic;
+  .explain {
+    appearance: none;
+    align-self: flex-end;
+    margin: auto 0 0;
+    padding: var(--space-1) 0 0;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    line-height: 1.2;
+    color: var(--ink-faint);
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid transparent;
+    cursor: pointer;
+    transition:
+      color var(--duration-fast) var(--ease-paper),
+      border-color var(--duration-fast) var(--ease-paper);
+
+    &:hover {
+      color: var(--ink);
+      border-bottom-color: var(--ink-muted);
+    }
   }
 
   .empty {
@@ -60,4 +127,8 @@
     width: 100%;
     background: var(--rule);
   }
+}
+
+.indexCardUnit.left .explain {
+  align-self: flex-start;
 }
