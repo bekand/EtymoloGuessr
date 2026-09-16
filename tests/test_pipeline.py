@@ -40,12 +40,13 @@ def test_proper_noun_leaf_filter():
     assert leaf_reuse_key("English", "gift") == "English\tgift"
 
 
-def test_gloss_overlap_detects_same_meaning():
+def test_gloss_overlap_and_still_same_meaning():
     assert gloss_overlap("a dog used for hunting", "a dog") > 0.2
     assert gloss_overlap("a present given to someone", "poison; a toxic substance") < 0.2
-    assert still_same_meaning("a dog used for hunting", "a dog", 0.5)
-    assert still_same_meaning("a dog", "a dog", 0.5)
-    assert not still_same_meaning("a present given to someone", "poison; a toxic substance", 0.5)
+    assert still_same_meaning("dog", "a dog used for hunting")
+    assert still_same_meaning("Gift", "a gift; something given")
+    assert not still_same_meaning("gift", "poison; a toxic substance")
+    assert not still_same_meaning("the", "the ancestor sense")
 
 
 def test_puzzle_id_order_invariant():
@@ -58,27 +59,24 @@ def test_puzzle_id_order_invariant():
 
 
 def test_quality_score_is_integer_rubric():
-    base: dict[str, Any] = dict(n_nodes=4, high_overlap=False, lca_is_modern=False)
+    base: dict[str, Any] = dict(high_overlap=False, lca_is_modern=False)
     assert quality_score(lang_a="English", lang_b="German", **base) == 5
     assert quality_score(lang_a="English", lang_b="English", **base) == 2  # −3 same-lang
     assert quality_score(lang_a="Spanish", lang_b="Portuguese", **base) == 4
     assert quality_score(lang_a="English", lang_b="German", **{**base, "lca_is_modern": True}) == 4
     assert quality_score(lang_a="English", lang_b="German", **{**base, "high_overlap": True}) == 4
-    assert quality_score(lang_a="English", lang_b="German", **{**base, "n_nodes": 3}) == 4
     worst_cross = quality_score(
         lang_a="Spanish",
         lang_b="Portuguese",
-        n_nodes=3,
         high_overlap=True,
         lca_is_modern=True,
     )
-    assert worst_cross == 1
+    assert worst_cross == 2
     assert isinstance(worst_cross, int)
     assert (
         quality_score(
             lang_a="English",
             lang_b="English",
-            n_nodes=3,
             high_overlap=True,
             lca_is_modern=True,
         )
@@ -130,14 +128,12 @@ def _synth_shift_graph(n_leaves: int, shared_ancestors: int = 20, *, include_pro
         "leaf_languages": {"English": "en", "Spanish": "es", "Portuguese": "pt", "German": "de"},
         "ancestor_reltypes": ["inherited_from", "borrowed_from", "derived_from", "root"],
         "generate": {
-            "min_nodes": 3,
-            "max_nodes": 5,
-            "max_ancestor_depth": 6,
-            "max_gloss_overlap": 0.5,
-            "n": 10,
             "min_quality": 3,
             "n_choices": 4,
             "seed": 1,
+            "n": 10,
+            "max_nodes": 9,
+            "max_gloss_overlap": 0.5,
         },
     }
     return g, glosses, cfg
@@ -182,9 +178,7 @@ def test_extract_candidates_skips_unrelated_leaf_pairs():
         "leaf_languages": {"English": "en", "Spanish": "es", "Portuguese": "pt", "German": "de"},
         "ancestor_reltypes": ["inherited_from"],
         "generate": {
-            "min_nodes": 3,
-            "max_nodes": 5,
-            "max_ancestor_depth": 6,
+            "max_nodes": 9,
             "max_gloss_overlap": 0.5,
         },
     }
@@ -199,9 +193,7 @@ def _two_leaf_lca_cfg() -> dict[str, Any]:
         "leaf_languages": {"English": "en", "Spanish": "es", "Portuguese": "pt", "German": "de"},
         "ancestor_reltypes": ["inherited_from"],
         "generate": {
-            "min_nodes": 3,
-            "max_nodes": 5,
-            "max_ancestor_depth": 6,
+            "max_nodes": 9,
             "max_gloss_overlap": 0.5,
         },
     }
@@ -245,6 +237,25 @@ def test_extract_candidates_rejects_missing_lca_gloss():
     assert funnel.counts.get("candidates", 0) == 0
 
 
+def test_extract_candidates_rejects_leaf_term_in_lca_gloss():
+    """Both leaves still same meaning when each term appears in the LCA gloss."""
+    rows = [
+        dict(term="hound", lang="English", reltype="inherited_from", related_term="*hundaz", related_lang="Proto-Germanic"),
+        dict(term="Hund", lang="German", reltype="inherited_from", related_term="*hundaz", related_lang="Proto-Germanic"),
+    ]
+    glosses = {
+        "English\thound": "a hunting dog",
+        "German\tHund": "a domestic animal",
+        "Proto-Germanic\t*hundaz": "a hound or hund; a dog",
+    }
+    g = build_graph(pd.DataFrame(rows), {"inherited_from"})
+    funnel = Funnel()
+    cands = extract_candidates(g, glosses, _two_leaf_lca_cfg(), funnel)
+    assert cands == []
+    assert funnel.counts.get("same_meaning", 0) >= 1
+    assert funnel.counts.get("candidates", 0) == 0
+
+
 def test_extract_candidates_accepts_lca_term_length_three():
     """Boundary: LCA term of exactly 3 characters is allowed when glossed."""
     rows = [
@@ -263,6 +274,76 @@ def test_extract_candidates_accepts_lca_term_length_three():
     assert cands[0]["lca"]["term"] == "abc"
     assert funnel.counts.get("lca_term_too_short", 0) == 0
     assert funnel.counts.get("no_gloss", 0) == 0
+
+
+def _long_lca_pair(n_en_inter: int, n_de_inter: int) -> tuple[pd.DataFrame, dict[str, str]]:
+    """Two leaves chained through unused ancestor langs to a shared Proto-Germanic LCA."""
+    inter_langs = [
+        "Old English",
+        "Latin",
+        "Ancient Greek",
+        "Arabic",
+        "Sanskrit",
+        "Persian",
+        "Hebrew",
+        "Gothic",
+    ]
+    rows: list[dict[str, str]] = []
+    glosses = {
+        "English\tleafx": "modern sense alpha zebra",
+        "German\tleafy": "modern sense beta quartz",
+        "Proto-Germanic\trootx": "ancient root poison venom",
+    }
+
+    def chain(leaf_term: str, leaf_lang: str, n_inter: int, prefix: str) -> None:
+        prev_term, prev_lang = leaf_term, leaf_lang
+        for i in range(n_inter):
+            term, lang = f"{prefix}{i}xx", inter_langs[i]
+            rows.append(
+                dict(
+                    term=prev_term,
+                    lang=prev_lang,
+                    reltype="inherited_from",
+                    related_term=term,
+                    related_lang=lang,
+                )
+            )
+            prev_term, prev_lang = term, lang
+        rows.append(
+            dict(
+                term=prev_term,
+                lang=prev_lang,
+                reltype="inherited_from",
+                related_term="rootx",
+                related_lang="Proto-Germanic",
+            )
+        )
+
+    chain("leafx", "English", n_en_inter, "en")
+    chain("leafy", "German", n_de_inter, "de")
+    return pd.DataFrame(rows), glosses
+
+
+def test_extract_candidates_rejects_graphs_over_max_nodes():
+    """10 unique nodes (2 leaves + 7 intermediates + LCA) exceeds max_nodes=9."""
+    df, glosses = _long_lca_pair(4, 3)
+    g = build_graph(df, {"inherited_from"})
+    funnel = Funnel()
+    cands = extract_candidates(g, glosses, _two_leaf_lca_cfg(), funnel)
+    assert cands == []
+    assert funnel.counts.get("too_big", 0) >= 1
+    assert funnel.counts.get("candidates", 0) == 0
+
+
+def test_extract_candidates_accepts_max_nodes_boundary():
+    """9 unique nodes (2 leaves + 6 intermediates + LCA) is allowed."""
+    df, glosses = _long_lca_pair(3, 3)
+    g = build_graph(df, {"inherited_from"})
+    funnel = Funnel()
+    cands = extract_candidates(g, glosses, _two_leaf_lca_cfg(), funnel)
+    assert len(cands) >= 1
+    assert len(cands[0]["nodes"]) == 9
+    assert funnel.counts.get("too_big", 0) == 0
 
 
 def test_validate_happy_path():
@@ -314,7 +395,7 @@ def test_validate_reports_malformed_choices_and_graph_together():
     errors = validate_puzzles([p])
 
     assert any("choices must contain objects" in error for error in errors)
-    assert any("answer graph must have" in error for error in errors)
+    assert any("leaves must appear in the graph" in error for error in errors)
 
 
 def test_from_dict_round_trips_answer_only():

@@ -36,9 +36,11 @@ ancestor_languages:
   - Ancient Greek
   - Byzantine Greek
   - Arabic
+  - Hebrew
   - Classical Nahuatl
   - Persian
   - Middle Persian
+  - Old Persian
   - Sanskrit
   - Frankish
   - Medieval Latin
@@ -60,14 +62,12 @@ ancestor_reltypes:
   - root
 
 generate:
-  n: 200
-  min_quality: 2
-  min_nodes: 3
-  max_nodes: 5
-  max_ancestor_depth: 6
+  n: 0 # full pass
+  min_quality: 4
+  max_nodes: 9
   max_gloss_overlap: 0.5
   n_choices: 4
-  seed: 42
+  seed: 89
 
 sources:
   etymology:
@@ -132,6 +132,21 @@ sources:
       lang: Arabic
       sha256: null
       bytes_estimate: 80000000
+    - name: kaikki-Hebrew.jsonl
+      url: https://kaikki.org/dictionary/Hebrew/kaikki.org-dictionary-Hebrew.jsonl
+      lang: Hebrew
+      sha256: null
+      bytes_estimate: 60000000
+    - name: kaikki-Persian.jsonl
+      url: https://kaikki.org/dictionary/Persian/kaikki.org-dictionary-Persian.jsonl
+      lang: Persian
+      sha256: null
+      bytes_estimate: 90000000
+    - name: kaikki-Old-Persian.jsonl
+      url: https://kaikki.org/dictionary/Old%20Persian/kaikki.org-dictionary-OldPersian.jsonl
+      lang: Old Persian
+      sha256: null
+      bytes_estimate: 2000000
     - name: kaikki-Proto-Germanic.jsonl
       url: https://kaikki.org/dictionary/Proto-Germanic/kaikki.org-dictionary-ProtoGermanic.jsonl
       lang: Proto-Germanic

@@ -17,7 +17,7 @@ from etl.paths import load_config, reports_dir
 
 log = logging.getLogger(__name__)
 
-STOPWORDS = {
+FUNCTION_WORDS = {
     "a",
     "an",
     "the",
@@ -73,12 +73,12 @@ def tokenize(text: str | None) -> set[str]:
         else:
             if buf:
                 w = "".join(buf)
-                if w not in STOPWORDS and len(w) >= MIN_TOKEN_LENGTH:
+                if w not in FUNCTION_WORDS and len(w) >= MIN_TOKEN_LENGTH:
                     words.add(w)
                 buf = []
     if buf:
         w = "".join(buf)
-        if w not in STOPWORDS and len(w) >= MIN_TOKEN_LENGTH:
+        if w not in FUNCTION_WORDS and len(w) >= MIN_TOKEN_LENGTH:
             words.add(w)
     return words
 
@@ -90,16 +90,12 @@ def gloss_overlap(a: str | None, b: str | None) -> float:
     return len(ta & tb) / len(ta | tb)
 
 
-def still_same_meaning(leaf_gloss: str | None, lca_gloss: str | None, max_overlap: float) -> bool:
-    """True when a modern leaf still expresses the ancestor gloss (no semantic shift)."""
-    if gloss_overlap(leaf_gloss, lca_gloss) >= max_overlap:
-        return True
-    leaf_tok, lca_tok = tokenize(leaf_gloss), tokenize(lca_gloss)
-    if lca_tok and lca_tok <= leaf_tok:
-        return True
-    if leaf_tok and lca_tok and leaf_tok <= lca_tok:
-        return True
-    return False
+def still_same_meaning(leaf_term: str | None, gloss: str | None) -> bool:
+    """True when a content word from the leaf term still appears in the gloss."""
+    term_tok = tokenize(leaf_term)
+    if not term_tok:
+        return False
+    return bool(term_tok & tokenize(gloss))
 
 
 def lang_pair_code(lang_a: str, lang_b: str, leaf_codes: dict[str, str]) -> str:
@@ -119,19 +115,17 @@ def build_graph(edges, ancestor_reltypes: set[str]) -> nx.DiGraph:
     return g
 
 
-def ancestor_paths(g: nx.DiGraph, start: str, max_depth: int, ancestor_reltypes: set[str]) -> dict[str, list[str]]:
+def ancestor_paths(g: nx.DiGraph, start: str, ancestor_reltypes: set[str]) -> dict[str, list[str]]:
     paths: dict[str, list[str]] = {start: [start]}
-    q: deque[tuple[str, int]] = deque([(start, 0)])
+    q: deque[str] = deque([start])
     while q:
-        node, depth = q.popleft()
-        if depth >= max_depth:
-            continue
+        node = q.popleft()
         for _, succ, data in g.out_edges(node, data=True):
             if data.get("reltype") not in ancestor_reltypes:
                 continue
             if succ not in paths:
                 paths[succ] = paths[node] + [succ]
-                q.append((succ, depth + 1))
+                q.append(succ)
     return paths
 
 
@@ -147,10 +141,8 @@ def quality_score(
     *,
     lang_a: str,
     lang_b: str,
-    n_nodes: int,
     high_overlap: bool,
     lca_is_modern: bool,
-    min_nodes: int = 3,
 ) -> int:
     """Integer 0-5. Same-language pairs are heavily down-ranked (−3)."""
     score = 5
@@ -161,8 +153,6 @@ def quality_score(
     if lca_is_modern:
         score -= 1
     if high_overlap:
-        score -= 1
-    if n_nodes <= min_nodes:
         score -= 1
     return max(0, score)
 
@@ -245,9 +235,7 @@ def extract_candidates(
     leaf_langs = cfg["leaf_languages"]
     ancestor_reltypes = set(cfg["ancestor_reltypes"])
     generation_config = cfg["generate"]
-    min_nodes = int(generation_config["min_nodes"])
     max_nodes = int(generation_config["max_nodes"])
-    max_depth = int(generation_config["max_ancestor_depth"])
     max_overlap = float(generation_config["max_gloss_overlap"])
 
     leaves = [n for n, data in g.nodes(data=True) if data.get("lang") in leaf_langs]
@@ -270,7 +258,7 @@ def extract_candidates(
             funnel.bump("no_gloss_leaf")
             continue
         gloss_cache[n] = gloss
-        paths_by_leaf[n] = ancestor_paths(g, n, max_depth, ancestor_reltypes)
+        paths_by_leaf[n] = ancestor_paths(g, n, ancestor_reltypes)
         leaves_with_gloss.append(n)
     if progress:
         progress(
@@ -308,8 +296,6 @@ def extract_candidates(
         path_b: list[str] = []
         for lca_node_id in ranked:
             nodes = subgraph_from_paths(paths_a[lca_node_id], paths_b[lca_node_id])
-            if len(nodes) < min_nodes:
-                continue
             if len(nodes) > max_nodes:
                 continue
             chosen = lca_node_id
@@ -318,11 +304,7 @@ def extract_candidates(
             path_b = paths_b[lca_node_id]
             break
         if chosen is None:
-            too_big = any(
-                len(subgraph_from_paths(paths_a[lca_node_id], paths_b[lca_node_id])) > max_nodes
-                for lca_node_id in ranked
-            )
-            funnel.bump("too_big" if too_big else "too_small")
+            funnel.bump("too_big")
             continue
 
         lca_lang = g.nodes[chosen]["lang"]
@@ -335,19 +317,16 @@ def extract_candidates(
             funnel.bump("no_gloss")
             continue
 
-        if still_same_meaning(gloss_a, lca_gloss, max_overlap) and still_same_meaning(
-            gloss_b, lca_gloss, max_overlap
-        ):
+        if still_same_meaning(term_a, lca_gloss) and still_same_meaning(term_b, lca_gloss):
             funnel.bump("same_meaning")
             continue
-        if still_same_meaning(gloss_a, gloss_b, max_overlap):
+        if gloss_overlap(gloss_a, gloss_b) >= max_overlap:
             funnel.bump("same_meaning")
             continue
 
-        n_nodes = len(node_list)
         high_overlap = (
-            still_same_meaning(gloss_a, lca_gloss, max_overlap)
-            or still_same_meaning(gloss_b, lca_gloss, max_overlap)
+            still_same_meaning(term_a, lca_gloss)
+            or still_same_meaning(term_b, lca_gloss)
             or gloss_overlap(gloss_a, gloss_b) >= max_overlap
         )
 
@@ -371,10 +350,8 @@ def extract_candidates(
         score = quality_score(
             lang_a=lang_a,
             lang_b=lang_b,
-            n_nodes=n_nodes,
             high_overlap=high_overlap,
             lca_is_modern=lca_lang in leaf_langs,
-            min_nodes=min_nodes,
         )
         candidates.append(
             {

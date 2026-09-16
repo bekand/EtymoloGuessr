@@ -59,7 +59,7 @@ A full refresh is tens of minutes and hundreds of MB. The usual loop is `generat
 
 1. **Reduce graph** — keep leaf langs English / Spanish / Portuguese / German and the ancestor allowlist in config; keep `inherited_from`, `borrowed_from`, `derived_from`, `root`, `cognate_of`, `doublet_with`; drop null related terms, multiword junk, affixes.
 2. **Index glosses** — first gloss per `(lang, term)`. Puzzles with no LCA gloss are skipped (`no_gloss`).
-3. **Extract puzzles** — two modern leaves, connecting subgraph of 3-5 nodes, prefer cross-language via quality score, reject pairs where both leaves still mean the ancestor, reject LCA terms shorter than 3 characters (`lca_term_too_short`), 4-way multiple-choice from other LCA glosses.
+3. **Extract puzzles** — two modern leaves and their closest connecting subgraph / LCA (at most 9 nodes; `too_big` otherwise), prefer cross-language via quality score, reject pairs where both leaf terms still appear in the ancestor gloss, reject LCA terms shorter than 3 characters (`lca_term_too_short`), 4-way multiple-choice from other LCA glosses.
 4. **Ids** — SHA-256 of `(leaf_a, leaf_b, lca, gold edges)` so reruns upsert instead of duplicating. `--seed` controls sampling and choice shuffle.
 
 Walks toward ancestors use `inherited_from` / `borrowed_from` / `derived_from` / `root` only.
@@ -73,8 +73,7 @@ Integer 0-5, stored on each puzzle. Start at 5, then:
 | Same leaf language | -3 |
 | Spanish–Portuguese pair | -1 |
 | LCA is a modern leaf language (EN/ES/PT/DE) | -1 |
-| High gloss overlap (either leaf still close to the LCA, or the two leaves to each other) | -1 |
-| Low node count (3 nodes, the minimum) | -1 |
+| High gloss overlap (either leaf term still appears in the LCA gloss, or the two leaf glosses overlap) | -1 |
 
 Same-language pairs top out at **2**, so the default `--min-quality` of **3** drops them. Default is config `generate.min_quality` (currently 3).
 
@@ -135,7 +134,7 @@ If you omit every sink, output is `data/puzzles/puzzles.jsonl`. Funnel counts al
 
 With `--n > 0`, candidate search **early-exits** once enough quality survivors are found (and only walks leaf pairs that share an ancestor). Use `--n 0` for a full pass. Early exit can change which top-N puzzles you get versus an exhaustive quality sort over every pair.
 
-Rejection reasons in the funnel include `no_gloss`, `lca_term_too_short`, `too_big`, `too_small`, `same_meaning`, `no_lca`, `proper_noun_leaf`, `below_min_quality`, `leaf_reuse`, `insufficient_distractors`, `early_exit`.
+Rejection reasons in the funnel include `no_gloss`, `lca_term_too_short`, `too_big`, `same_meaning`, `no_lca`, `proper_noun_leaf`, `below_min_quality`, `leaf_reuse`, `insufficient_distractors`, `early_exit`.
 
 ### `etl reset`
 
@@ -199,7 +198,7 @@ uv run etl inspect --db <id>
 
 ### `etl validate`
 
-Schema-check a puzzle set. Failures include: not exactly 4 choices, duplicate ids, graph not 3–5 nodes, leaves missing from the graph, gold edges that reference unknown node ids, distractors equal to the correct gloss. Payloads must not include a stored `prompt_graph` (derive from `answer_graph` instead).
+Schema-check a puzzle set. Failures include: not exactly 4 choices, duplicate ids, more than 9 nodes, leaves missing from the graph, gold edges that reference unknown node ids, distractors equal to the correct gloss. Payloads must not include a stored `prompt_graph` (derive from `answer_graph` instead).
 
 ```bash
 uv run etl validate

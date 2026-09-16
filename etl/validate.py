@@ -13,7 +13,6 @@ def _err(errors: list[str], puzzle_id: str, msg: str) -> None:
 def validate_puzzle(p: Puzzle, errors: list[str], cfg: dict | None = None) -> None:
     generation_config = (cfg or load_config())["generate"]
     expected_choices = int(generation_config["n_choices"])
-    min_nodes = int(generation_config["min_nodes"])
     max_nodes = int(generation_config["max_nodes"])
     pid = p.id or "<missing-id>"
     if not p.id or len(p.id) < MIN_PUZZLE_ID_LENGTH:
@@ -56,8 +55,8 @@ def validate_puzzle(p: Puzzle, errors: list[str], cfg: dict | None = None) -> No
     answer = p.answer_graph or {}
     anodes = answer.get("nodes") or []
     aedges = answer.get("edges") or []
-    if not (min_nodes <= len(anodes) <= max_nodes):
-        _err(errors, pid, f"answer graph must have {min_nodes}-{max_nodes} nodes, got {len(anodes)}")
+    if len(anodes) > max_nodes:
+        _err(errors, pid, f"answer graph must have at most {max_nodes} nodes, got {len(anodes)}")
     node_ids = {n.get("id") for n in anodes if isinstance(n, dict)}
 
     leaf_ids = {
