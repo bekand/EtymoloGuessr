@@ -103,6 +103,14 @@ def test_first_gloss_skips_grammatical_forms_without_form_of():
     assert not is_grammatical_gloss("masculine, male (of humans or animals)")
     assert not is_grammatical_gloss("present, a gift given to someone")
     assert is_grammatical_gloss("present active infinitive of superō")
+    assert first_gloss({"senses": [{"glosses": ["[with genitive]", "through"]}]}) == "through"
+    assert (
+        first_gloss({"senses": [{"glosses": ["[of place] above; over; on the top of; upon"]}]})
+        == "above; over; on the top of; upon"
+    )
+    assert first_gloss({"senses": [{"glosses": ["[with genitive]"]}]}) is None
+    assert is_grammatical_gloss("[with genitive]")
+    assert not is_grammatical_gloss("[α]_D, the angle of rotation")
 
 
 def test_index_glosses_inherits_form_only_lemma():
@@ -485,15 +493,22 @@ def test_extract_candidates_keeps_lexical_homograph_lca():
     assert cands[0]["lca"]["gloss"] == "deed, act, doing, work"
 
 
-def test_extract_candidates_rejects_leftover_grammatical_lca_gloss():
+@pytest.mark.parametrize(
+    "lca_term,lca_gloss",
+    [
+        ("fare", "second-person singular present active indicative of for"),
+        ("huper", "[with genitive]"),
+    ],
+)
+def test_extract_candidates_rejects_leftover_grammatical_lca_gloss(lca_term, lca_gloss):
     rows = [
-        dict(term="leafx", lang="English", reltype="inherited_from", related_term="fare", related_lang="Latin"),
-        dict(term="leafy", lang="German", reltype="inherited_from", related_term="fare", related_lang="Latin"),
+        dict(term="leafx", lang="English", reltype="inherited_from", related_term=lca_term, related_lang="Latin"),
+        dict(term="leafy", lang="German", reltype="inherited_from", related_term=lca_term, related_lang="Latin"),
     ]
     glosses = {
         "English\tleafx": "modern sense alpha zebra",
         "German\tleafy": "modern sense beta quartz",
-        "Latin\tfare": "second-person singular present active indicative of for",
+        f"Latin\t{lca_term}": lca_gloss,
     }
     g = build_graph(pd.DataFrame(rows), {"inherited_from"})
     funnel = Funnel()

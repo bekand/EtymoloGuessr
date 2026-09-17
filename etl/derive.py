@@ -111,14 +111,45 @@ _FORM_GLOSS_RE = re.compile(
     r")"
 )
 
+# Wiktionary case-government / auxiliary labels, e.g. ``[with genitive]``,
+# ``[of place] above``. Not chemistry/notation brackets like ``[α]_D``.
+_CASE_QUALIFIER_RE = re.compile(
+    r"(?i)^\["
+    r"(?:"
+    r"with(?:\s+the)?\s+(?:genitive|dative|accusative|ablative|nominative|vocative|locative)"
+    r"|of\s+(?:place|time|person|persons)"
+    r"|auxiliary\s+(?:haben|sein)"
+    r")"
+    r"[^\]]*\]\s*"
+)
+
 _LEMMA_HOPS = 3
+
+
+def _strip_case_qualifier(text: str) -> str:
+    s = text.strip()
+    if not _CASE_QUALIFIER_RE.match(s):
+        return s
+    return _CASE_QUALIFIER_RE.sub("", s, count=1).strip()
+
+
+def _drop_case_qualifiers(parts: list[str]) -> list[str]:
+    out: list[str] = []
+    for part in parts:
+        rest = _strip_case_qualifier(part)
+        if rest:
+            out.append(rest)
+    return out
 
 
 def is_grammatical_gloss(text: str | None) -> bool:
     """True when a gloss is a grammatical-form label rather than a meaning."""
     if not text:
         return False
-    return bool(_FORM_GLOSS_RE.search(text.strip()))
+    s = text.strip()
+    if _CASE_QUALIFIER_RE.match(s) and not _strip_case_qualifier(s):
+        return True
+    return bool(_FORM_GLOSS_RE.search(s))
 
 
 def _is_inflection_sense(sense: dict[str, Any], parts: list[str]) -> bool:
@@ -132,7 +163,7 @@ def _is_inflection_sense(sense: dict[str, Any], parts: list[str]) -> bool:
 
 def first_gloss(obj: dict[str, Any]) -> str | None:
     for sense in obj.get("senses") or []:
-        parts = _sense_gloss_parts(sense)
+        parts = _drop_case_qualifiers(_sense_gloss_parts(sense))
         if not parts or _is_inflection_sense(sense, parts):
             continue
         if parts[0].endswith(":") and len(parts) > 1:
