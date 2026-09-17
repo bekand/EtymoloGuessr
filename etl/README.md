@@ -137,6 +137,12 @@ Flags:
 
 If you omit every sink, output is `data/puzzles/puzzles.jsonl`. Funnel counts always go to stderr and `data/reports/funnel.json`.
 
+The Railway API embeds `backend/internal/catalog/puzzles.jsonl`. After a full generate, copy the snapshot there and redeploy the API (do not run ETL in the cloud):
+
+```bash
+cp data/puzzles/puzzles.jsonl backend/internal/catalog/puzzles.jsonl
+```
+
 **JSONL and Postgres are separate sinks.** `generate` always walks `data/derived/` and writes to exactly one of them (or stdout). It never reads an existing puzzle file.
 
 | You want | Command |

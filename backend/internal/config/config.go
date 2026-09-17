@@ -6,10 +6,11 @@ import (
 )
 
 type Config struct {
-	Addr          string
-	DatabaseURL   string
-	CORSOrigins   []string
-	AutoMigrate   bool
+	Addr        string
+	DatabaseURL string
+	PuzzlesPath string
+	CORSOrigins []string
+	AutoMigrate bool
 }
 
 func FromEnv() Config {
@@ -24,11 +25,26 @@ func FromEnv() Config {
 	}
 	migrate := strings.ToLower(getenv("AUTO_MIGRATE", "true"))
 	return Config{
-		Addr:        getenv("HTTP_ADDR", ":8080"),
-		DatabaseURL: os.Getenv("DATABASE_URL"),
+		Addr:        listenAddr(),
+		DatabaseURL: strings.TrimSpace(os.Getenv("DATABASE_URL")),
+		PuzzlesPath: strings.TrimSpace(os.Getenv("PUZZLES_PATH")),
 		CORSOrigins: cleaned,
 		AutoMigrate: migrate == "1" || migrate == "true" || migrate == "yes",
 	}
+}
+
+// listenAddr prefers Railway's PORT (digits only) over HTTP_ADDR.
+func listenAddr() string {
+	if port := strings.TrimSpace(os.Getenv("PORT")); port != "" {
+		if strings.HasPrefix(port, ":") {
+			return port
+		}
+		if strings.Contains(port, ":") {
+			return port
+		}
+		return ":" + port
+	}
+	return getenv("HTTP_ADDR", ":8080")
 }
 
 func getenv(key, fallback string) string {

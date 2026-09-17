@@ -82,7 +82,7 @@ if err != nil {
 
 `fmt.Errorf("answer_graph: %w", err)` **wraps** the cause (`%w`) so `errors.Is` / `errors.As` still work. Ignoring `err` is how you get silent bugs; `go vet` will not always save you.
 
-`os.Exit(1)` in `main` is for fatal startup (missing `DATABASE_URL`, cannot connect). Request handlers write HTTP status codes instead.
+`os.Exit(1)` in `main` is for fatal startup (cannot open Postgres or JSONL catalog). Request handlers write HTTP status codes instead.
 
 ## `context.Context`
 
@@ -99,7 +99,7 @@ type Store interface {
 }
 ```
 
-**No `implements` keyword.** `db.Store` satisfies this because it has those methods. Tests fake it with `memStore` in `server_test.go` — same idea as a Python Protocol / duck-typed mock, but checked at compile time when you pass it to `api.New`.
+**No `implements` keyword.** `db.Store` and `catalog.MemoryStore` both satisfy this because they have those methods. HTTP tests construct a `catalog.MemoryStore` — same idea as a Python Protocol / duck-typed mock, but checked at compile time when you pass it to `api.New`. Production without `DATABASE_URL` uses that same store, loaded from JSONL (`go:embed` or `PUZZLES_PATH`).
 
 Small interfaces (two methods) are idiomatic. Do not make a 20-method “IDatabase”.
 

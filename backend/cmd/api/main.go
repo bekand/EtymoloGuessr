@@ -10,8 +10,10 @@ import (
 	"time"
 
 	"github.com/bekand/EtymoloGuessr/backend/internal/api"
+	"github.com/bekand/EtymoloGuessr/backend/internal/catalog"
 	"github.com/bekand/EtymoloGuessr/backend/internal/config"
 	"github.com/bekand/EtymoloGuessr/backend/internal/db"
+	"github.com/bekand/EtymoloGuessr/backend/internal/puzzle"
 )
 
 func main() {
@@ -19,32 +21,21 @@ func main() {
 	slog.SetDefault(logger)
 
 	cfg := config.FromEnv()
-	if cfg.DatabaseURL == "" {
-		logger.Error("DATABASE_URL is required")
-		os.Exit(1)
-	}
-
 	ctx := context.Background()
-	pool, err := db.Connect(ctx, cfg.DatabaseURL)
+
+	store, cleanup, ready, err := openStore(ctx, cfg, logger)
 	if err != nil {
-		logger.Error("connect", "err", err)
+		logger.Error("store", "err", err)
 		os.Exit(1)
 	}
-	defer pool.Close()
-
-	if cfg.AutoMigrate {
-		if err := db.Migrate(ctx, pool); err != nil {
-			logger.Error("migrate", "err", err)
-			os.Exit(1)
-		}
-		logger.Info("migrations applied")
+	if cleanup != nil {
+		defer cleanup()
 	}
 
-	store := db.NewStore(pool)
 	handler := api.New(store, cfg, logger)
-	handler.SetReady(func(r *http.Request) error {
-		return store.Ping(r.Context())
-	})
+	if ready != nil {
+		handler.SetReady(ready)
+	}
 
 	httpSrv := &http.Server{
 		Addr:              cfg.Addr,
@@ -67,4 +58,43 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = httpSrv.Shutdown(shutdownCtx)
+}
+
+func openStore(ctx context.Context, cfg config.Config, logger *slog.Logger) (puzzle.Store, func(), func(*http.Request) error, error) {
+	if cfg.DatabaseURL != "" {
+		pool, err := db.Connect(ctx, cfg.DatabaseURL)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		if cfg.AutoMigrate {
+			if err := db.Migrate(ctx, pool); err != nil {
+				pool.Close()
+				return nil, nil, nil, err
+			}
+			logger.Info("migrations applied")
+		}
+		store := db.NewStore(pool)
+		logger.Info("store", "backend", "postgres")
+		return store, pool.Close, func(r *http.Request) error {
+			return store.Ping(r.Context())
+		}, nil
+	}
+
+	var (
+		mem    *catalog.MemoryStore
+		err    error
+		source string
+	)
+	if cfg.PuzzlesPath != "" {
+		mem, err = catalog.LoadFile(cfg.PuzzlesPath)
+		source = cfg.PuzzlesPath
+	} else {
+		mem, err = catalog.LoadBytes(catalog.EmbeddedJSONL)
+		source = "embed"
+	}
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	logger.Info("store", "backend", "jsonl", "source", source, "puzzles", mem.Len())
+	return mem, nil, nil, nil
 }

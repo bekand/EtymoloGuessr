@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -9,39 +8,19 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bekand/EtymoloGuessr/backend/internal/catalog"
 	"github.com/bekand/EtymoloGuessr/backend/internal/config"
 	"github.com/bekand/EtymoloGuessr/backend/internal/puzzle"
 )
 
-type memStore struct {
-	puzzles map[string]*puzzle.Puzzle
-}
-
-func (m *memStore) RandomPuzzle(_ context.Context, filter puzzle.Filter) (*puzzle.Puzzle, error) {
-	for _, p := range m.puzzles {
-		if !p.Enabled {
-			continue
-		}
-		if filter.LangPair != "" && p.LangPair != filter.LangPair {
-			continue
-		}
-		if filter.MinQuality != nil && p.QualityScore < *filter.MinQuality {
-			continue
-		}
-		if filter.MinNodes != nil && len(p.AnswerGraph.Nodes) < *filter.MinNodes {
-			continue
-		}
-		return p, nil
+func testHandlerWith(puzzles ...*puzzle.Puzzle) http.Handler {
+	store, err := catalog.NewMemoryStore(puzzles)
+	if err != nil {
+		panic(err)
 	}
-	return nil, puzzle.ErrNotFound
-}
-
-func (m *memStore) GetPuzzle(_ context.Context, id string) (*puzzle.Puzzle, error) {
-	p, ok := m.puzzles[id]
-	if !ok || !p.Enabled {
-		return nil, puzzle.ErrNotFound
-	}
-	return p, nil
+	return New(store, config.Config{
+		CORSOrigins: []string{"http://localhost:5173"},
+	}, nil)
 }
 
 func fixturePuzzle() *puzzle.Puzzle {
@@ -93,16 +72,6 @@ func fixtureHardPuzzle() *puzzle.Puzzle {
 		},
 	}
 	return p
-}
-
-func testHandlerWith(puzzles ...*puzzle.Puzzle) http.Handler {
-	byID := make(map[string]*puzzle.Puzzle, len(puzzles))
-	for _, p := range puzzles {
-		byID[p.ID] = p
-	}
-	return New(&memStore{puzzles: byID}, config.Config{
-		CORSOrigins: []string{"http://localhost:5173"},
-	}, nil)
 }
 
 func testHandler() http.Handler {
@@ -367,6 +336,27 @@ func TestGetPuzzleNotFound(t *testing.T) {
 	}
 	if body["error"] != "puzzle not found" {
 		t.Fatalf("error %q", body["error"])
+	}
+}
+
+func TestHealthOKWithoutPostgres(t *testing.T) {
+	srv := httptest.NewServer(testHandler())
+	defer srv.Close()
+
+	res, err := http.Get(srv.URL + "/health")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status %d", res.StatusCode)
+	}
+	var body map[string]string
+	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body["status"] != "ok" {
+		t.Fatalf("body %+v", body)
 	}
 }
 

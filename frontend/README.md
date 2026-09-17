@@ -26,7 +26,11 @@ pnpm test     # Vitest (unit + MSW)
 pnpm test:e2e # Playwright against the test API (see root README)
 ```
 
-Dev expects the API at `http://localhost:8080`. The client calls `/puzzles/...`; Vite exposes that as `/api/puzzles/...` and strips `/api` before forwarding. Override with `VITE_API_URL` (no `/api` suffix), e.g. `http://localhost:8080`.
+Dev expects the API at `http://localhost:8080`. The client calls `/puzzles/...`; Vite exposes that as `/api/puzzles/...` and strips `/api` before forwarding. Override with `VITE_API_URL` (no `/api` suffix), e.g. `http://localhost:8080`. Production builds **require** `VITE_API_URL` (the public Go service URL); see the root README Railway section.
+
+## Production image
+
+[`Dockerfile`](Dockerfile) builds the Vite app, then serves `dist` with Caddy (`try_files` so `/easy` and `/hard` work). [`Caddyfile`](Caddyfile) listens on `PORT` (default 8080). Pass `VITE_API_URL` as a **build-arg**. Do not put the frontend in local Compose; `pnpm dev` is the play loop.
 
 ## Tests
 

@@ -1,6 +1,6 @@
 # EtymoloGuessr API
 
-Go HTTP service that serves pregenerated etymology puzzles from Postgres. It does not walk the Wiktionary graph: Python ETL writes rows, this process picks one, hides the answer, and grades a submission.
+Go HTTP service that serves pregenerated etymology puzzles. Local Docker Compose still uses Postgres. Production (Railway) loads a JSONL snapshot into process memory — no hosted database.
 
 Contract: [openapi.yaml](openapi.yaml). Go-language walkthrough: [go_noob_readme.md](go_noob_readme.md).
 
@@ -8,13 +8,15 @@ Contract: [openapi.yaml](openapi.yaml). Go-language walkthrough: [go_noob_readme
 
 ```
 backend/
-  cmd/api/              process entrypoint
+  cmd/api/              process entrypoint (Postgres if DATABASE_URL, else JSONL)
   internal/api/         HTTP routes, CORS, JSON
-  internal/config/      env vars
+  internal/catalog/     in-memory store + JSONL loader + embedded snapshot
+  internal/config/      env vars (PORT, HTTP_ADDR, DATABASE_URL, PUZZLES_PATH)
   internal/db/          pgx pool, migrations, queries
   internal/puzzle/      prompt stripping and scoring
   openapi.yaml
   Dockerfile
+  railway.json
 ```
 
 ## What it stores
@@ -40,7 +42,7 @@ Base URL defaults to `http://localhost:8080`. JSON field names on the wire are c
 
 ### `GET /health`
 
-Pings Postgres. `200 {"status":"ok"}` or `503`.
+When `DATABASE_URL` is set, pings Postgres (`503` if down). When serving JSONL, this is process-up only. `200 {"status":"ok"}`.
 
 ### `GET /puzzles/random`
 
@@ -103,7 +105,18 @@ CORS: `GET`, `POST`, `OPTIONS` from origins in `CORS_ORIGINS` (Vite defaults).
 
 ## Run locally
 
-Needs Go 1.24+ and Postgres 16.
+Needs Go 1.24+. Local play stack still wants Postgres 16 (`docker compose up db -d`). Production and `go run` without `DATABASE_URL` serve the embedded catalog.
+
+```bash
+# JSONL in-process (no Postgres) — uses backend/internal/catalog/puzzles.jsonl
+cd backend
+go run ./cmd/api
+
+# or a file you just generated
+PUZZLES_PATH=../data/puzzles/puzzles.jsonl go run ./cmd/api
+```
+
+Postgres (Compose DSN):
 
 ```bash
 # from repo root
@@ -148,16 +161,24 @@ cd backend
 go test ./...
 ```
 
-HTTP tests use an in-memory store. Scoring and prompt stripping are unit-tested in `internal/puzzle`. Store and `/health` tests against Postgres skip unless `TEST_DATABASE_URL` is set (throwaway compose on port 5433; see the root README). Run `go test -p 1 ./...` when that DSN is set so package tests do not share the database in parallel.
+HTTP tests use `catalog.MemoryStore` (same type as JSONL production). Scoring and prompt stripping are unit-tested in `internal/puzzle`. Store and `/health` tests against Postgres skip unless `TEST_DATABASE_URL` is set (throwaway compose on port 5433; see the root README). Run `go test -p 1 ./...` when that DSN is set so package tests do not share the database in parallel.
 
 ## Environment
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `DATABASE_URL` | required | Postgres DSN (`sslmode=disable` for local Compose) |
-| `HTTP_ADDR` | `:8080` | Listen address |
+| `DATABASE_URL` | unset | Postgres DSN. If set, the API uses Postgres (local Compose). If unset, JSONL catalog. |
+| `PUZZLES_PATH` | (embedded `puzzles.jsonl`) | JSONL file when `DATABASE_URL` is unset. Ignored when Postgres is configured. |
+| `PORT` | (none) | Listen port (Railway). Wins over `HTTP_ADDR`. Digits only → `:PORT`. |
+| `HTTP_ADDR` | `:8080` | Listen address when `PORT` is unset |
 | `CORS_ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173` | Comma-separated; `*` allows any Origin |
-| `AUTO_MIGRATE` | `true` | Apply `internal/db/migrations/*.sql` on boot |
+| `AUTO_MIGRATE` | `true` | Apply `internal/db/migrations/*.sql` on boot (Postgres only) |
+
+To refresh the committed snapshot after a full generate:
+
+```bash
+cp data/puzzles/puzzles.jsonl backend/internal/catalog/puzzles.jsonl
+```
 
 ## Migrations
 

@@ -12,7 +12,7 @@ Puzzle data is derived from [etymology-db](https://github.com/droher/etymology-d
 
 ```
 etl/            Python CLI: download dumps, filter the graph, emit puzzles
-backend/        Go HTTP API + Postgres schema (picks a puzzle, grades a solve)
+backend/        Go HTTP API (Postgres locally; JSONL catalog in production)
 frontend/       React + Vite UI (home, easy, hard)
 data/           Local artifacts (raw dumps, derived graph, puzzle JSONL) — not in git
 etl/tests/      ETL pytest (offline + optional Postgres)
@@ -45,7 +45,7 @@ Go 1.24+ is only needed if you run the API outside Docker (`go run ./cmd/api`).
 | ETL | Typer, PyYAML, NetworkX, pandas, PyArrow, psycopg, httpx |
 | API | Go stdlib `net/http`, [pgx](https://github.com/jackc/pgx) |
 | UI | React 19, Vite, TypeScript, Sass, TanStack Query, React Flow, React Router, IBM Plex |
-| Data | Postgres 16 |
+| Data | Postgres 16 locally; JSONL in-process on Railway |
 
 ## Run locally
 
@@ -97,3 +97,28 @@ cd frontend && pnpm exec playwright install chromium && pnpm test:e2e
 ```
 
 Wait until `http://localhost:18080/health` is ok before the Playwright run (it loads fixtures into the test database). The e2e UI uses `VITE_API_URL=http://localhost:18080`.
+
+## Deploy (Railway)
+
+Two services, **no Railway Postgres**. ETL stays on your machine. Catalog updates are: regenerate JSONL, copy into the API embed, redeploy.
+
+1. Generate puzzles locally (`uv run etl refresh` then `uv run etl generate --jsonl data/puzzles/puzzles.jsonl`) and copy the snapshot:
+
+   ```bash
+   cp data/puzzles/puzzles.jsonl backend/internal/catalog/puzzles.jsonl
+   ```
+
+   The repo ships a tiny fixture snapshot so the API still boots without a full dump.
+
+2. Create a Railway project with two services from this repo:
+
+   | Service | Root directory | Notes |
+   |---|---|---|
+   | **api** | `backend` | Dockerfile. Unset `DATABASE_URL`. `CORS_ORIGINS` = public **web** URL (no trailing slash). Railway injects `PORT`. Enable Serverless. |
+   | **web** | `frontend` | Dockerfile. Build arg / variable `VITE_API_URL` = public **api** URL (no trailing slash). Enable Serverless. |
+
+3. Deploy **api** first, copy its `*.up.railway.app` URL into the web service `VITE_API_URL`, then deploy **web**. Put the web URL on the api service `CORS_ORIGINS` and redeploy api if you guessed the web URL wrong.
+
+`GET https://<api>/health` is process-up (no Postgres). `/easy` and `/hard` are SPA routes (Caddy `try_files`). Custom domains need Railway Hobby; free plan is `*.up.railway.app` only.
+
+Do not run `etl` on Railway. Do not add a database plugin for v1.
