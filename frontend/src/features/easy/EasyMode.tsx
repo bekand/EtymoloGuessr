@@ -1,70 +1,36 @@
 import { useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import {
-  clearEasyPuzzleLock,
-  fetchLockedRandomEasy,
-  isPuzzleNotFound,
-  puzzleKeys,
-  solveEasyPuzzle,
-} from '@/api/puzzles'
-import type { PuzzlePrompt } from '@/api/types'
+import { solveEasyPuzzle } from '@/api/puzzles'
 import { Colophon, IndexCard, PlayHeader, PostIt, Sheet, Stamp } from '@/ui'
 import { joinClasses } from '@/utils/joinClasses'
 import { shuffle } from '@/utils/shuffle'
 import { useSettlingClip } from '@/utils/useSettlingClip'
-import { useStreak } from '@/utils/streak'
 import { FeedbackScreen } from '../feedback/FeedbackScreen'
+import { useSolvePuzzle } from '../hooks/useSolvePuzzle'
 import './EasyMode.scss'
 
 const CHOICE_TONES = ['yellow', 'pink', 'blue', 'green'] as const
 const CHOICE_MARKERS = ['A', 'B', 'C', 'D'] as const
 
-const randomEasyQuery = {
-  queryKey: puzzleKeys.randomEasy,
-  queryFn: fetchLockedRandomEasy,
-  staleTime: Infinity,
-  gcTime: Infinity,
-  refetchOnWindowFocus: false,
-  refetchOnReconnect: false,
-  refetchOnMount: false,
-} as const
-
 export function EasyMode() {
-  const queryClient = useQueryClient()
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [gradedPuzzle, setGradedPuzzle] = useState<PuzzlePrompt>()
   const [explainOpen, setExplainOpen] = useState<'left' | 'right' | null>(null)
-  const { streak, recordResult } = useStreak('easy')
   const { settling, onAnimationEnd } = useSettlingClip()
+  const {
+    puzzle,
+    puzzleQuery,
+    solveMutation,
+    revealing,
+    loading,
+    loadError,
+    streak,
+    submit,
+    next,
+  } = useSolvePuzzle(
+    'easy',
+    ({ id, choiceId }: { id: string; choiceId: string }) => solveEasyPuzzle(id, choiceId),
+    () => setSelectedId(null),
+  )
 
-  const solveMutation = useMutation({
-    mutationFn: ({ id, choiceId }: { id: string; choiceId: string }) =>
-      solveEasyPuzzle(id, choiceId),
-    onSuccess: (result) => {
-      recordResult(result.correct)
-      clearEasyPuzzleLock()
-      queryClient.removeQueries({ queryKey: puzzleKeys.randomEasy })
-    },
-    onError: (error) => {
-      if (!isPuzzleNotFound(error)) {
-        return
-      }
-      setGradedPuzzle(undefined)
-      setSelectedId(null)
-      queryClient.removeQueries({ queryKey: puzzleKeys.randomEasy })
-    },
-  })
-  const solved = solveMutation.isSuccess
-  const revealing = solveMutation.isPending || solved
-
-  const puzzleQuery = useQuery({
-    ...randomEasyQuery,
-    enabled: !solved,
-  })
-
-  const puzzle = puzzleQuery.data ?? gradedPuzzle
-  const loading = !puzzle && puzzleQuery.isPending
-  const loadError = !puzzle && puzzleQuery.isError
   const shuffleSeed = puzzle?.id ?? 'loading'
   const choiceTones = shuffle(CHOICE_TONES, shuffleSeed)
   const choices = shuffle(puzzle?.choices ?? [null, null, null, null], shuffleSeed)
@@ -82,10 +48,9 @@ export function EasyMode() {
         : 'Pick an answer!'
 
   function handleNext() {
-    setGradedPuzzle(undefined)
     setSelectedId(null)
     setExplainOpen(null)
-    solveMutation.reset()
+    next()
   }
 
   function renderPrompt() {
@@ -178,9 +143,8 @@ export function EasyMode() {
               if (!puzzle || !selectedId) {
                 return
               }
-              setGradedPuzzle(puzzle)
               setExplainOpen(null)
-              solveMutation.mutate({ id: puzzle.id, choiceId: selectedId })
+              submit(puzzle, { id: puzzle.id, choiceId: selectedId })
             }}
           >
             Submit

@@ -24,7 +24,7 @@ export function PlayHeader({ mode, streak }: PlayHeaderProps) {
       <p className="brand">EtymoloGuessr</p>
       <p className="mode" aria-live="polite">
         <span className="modeLabel">{MODE_LABEL[mode]}</span>
-        <span className="streak">{`[ Streak ${streak} ]`}</span>
+        <span className="streak">{`|Streak: ${streak}`}</span>
       </p>
     </header>
   )

@@ -18,14 +18,21 @@ test('easy mode plays a round without leaking gold on GET', async ({ page }) => 
 
   await expect(page.getByLabel('Word pair')).toBeVisible()
   await expect(page.locator('.modeLabel')).toHaveText('Easy')
-  await expect(page.getByText('[ Streak 0 ]')).toBeVisible()
+  await expect(page.getByText('|Streak: 0')).toBeVisible()
   await expect(page.getByLabel('Meaning choices').getByRole('button')).toHaveCount(4)
 
   await page.getByLabel('Meaning choices').getByRole('button').first().click()
+  const nextRandom = page.waitForResponse(
+    (res) =>
+      res.url().includes('/puzzles/random') &&
+      res.request().method() === 'GET' &&
+      res.ok(),
+  )
   await page.getByRole('button', { name: 'Submit answer' }).click()
 
   await expect(page.getByText(/Correct!|Unfortunately, that's not correct/)).toBeVisible()
   await expect(page.locator('.react-flow')).toBeVisible()
+  await nextRandom
 
   await page.getByRole('button', { name: 'Load the next puzzle' }).click()
   await expect(page.getByLabel('Word pair')).toBeVisible()

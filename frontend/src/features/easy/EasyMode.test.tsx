@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { type ReactNode } from 'react'
@@ -61,7 +61,7 @@ describe('EasyMode', () => {
       expect(button.querySelector('.marker')).not.toBeNull()
     }
     expect(screen.getByText('Easy', { selector: '.modeLabel' })).toBeInTheDocument()
-    expect(screen.getByText('[ Streak 0 ]')).toBeInTheDocument()
+    expect(screen.getByText('|Streak: 0')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Submit answer' })).toHaveClass('green')
 
     const choice = screen.getByRole('button', { name: /a male parent/ })
@@ -72,17 +72,18 @@ describe('EasyMode', () => {
 
     expect(await screen.findByText(/Correct!/)).toBeInTheDocument()
     expect(screen.getByTestId('gold-graph')).toBeInTheDocument()
-    expect(screen.getByText('[ Streak 1 ]')).toBeInTheDocument()
+    expect(screen.getByText('|Streak: 1')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Load the next puzzle' })).toHaveClass('green')
+    await waitFor(() => expect(randomCalls).toBe(2))
 
     await user.click(screen.getByRole('button', { name: 'Load the next puzzle' }))
-    expect(await screen.findByRole('article', { name: 'hound' })).toBeInTheDocument()
+    expect(screen.getByRole('article', { name: 'hound' })).toBeInTheDocument()
     expect(screen.queryByText(/Correct!/)).not.toBeInTheDocument()
-    expect(screen.getByText('[ Streak 1 ]')).toBeInTheDocument()
+    expect(screen.getByText('|Streak: 1')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /a river/ }))
     await user.click(screen.getByRole('button', { name: 'Submit answer' }))
     expect(await screen.findByText(/Unfortunately, that's not correct/)).toBeInTheDocument()
-    expect(screen.getByText('[ Streak 0 ]')).toBeInTheDocument()
+    expect(screen.getByText('|Streak: 0')).toBeInTheDocument()
   })
 })

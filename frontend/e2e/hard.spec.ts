@@ -6,7 +6,7 @@ test('hard mode places cards and reveals gold after submit', async ({ page }) =>
 
   await expect(page.getByLabel('Word cards')).toBeVisible()
   await expect(page.locator('.modeLabel')).toHaveText('Hard')
-  await expect(page.getByText('[ Streak 0 ]')).toBeVisible()
+  await expect(page.getByText('|Streak: 0')).toBeVisible()
   await expect(page.getByRole('button', { name: /^Place / }).first()).toBeVisible()
 
   while ((await page.getByRole('button', { name: /^Place / }).count()) > 0) {
@@ -14,8 +14,15 @@ test('hard mode places cards and reveals gold after submit', async ({ page }) =>
   }
 
   await expect(page.getByRole('button', { name: 'Submit graph' })).toBeEnabled()
+  const nextRandom = page.waitForResponse(
+    (res) =>
+      res.url().includes('/puzzles/random') &&
+      res.request().method() === 'GET' &&
+      res.ok(),
+  )
   await page.getByRole('button', { name: 'Submit graph' }).click()
 
   await expect(page.getByText(/Correct!|Unfortunately, that's not correct/)).toBeVisible()
   await expect(page.locator('.react-flow')).toBeVisible()
+  await nextRandom
 })

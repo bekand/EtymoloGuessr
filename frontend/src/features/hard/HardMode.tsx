@@ -1,66 +1,34 @@
 import { useRef, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import {
-  clearHardPuzzleLock,
-  fetchLockedRandomHard,
-  isPuzzleNotFound,
-  puzzleKeys,
-  solveHardPuzzle,
-} from '@/api/puzzles'
-import type { GraphEdge, PuzzlePrompt } from '@/api/types'
+import { solveHardPuzzle } from '@/api/puzzles'
+import type { GraphEdge } from '@/api/types'
 import { Colophon, PlayHeader, Sheet, Stamp } from '@/ui'
 import { joinClasses } from '@/utils/joinClasses'
 import { useSettlingClip } from '@/utils/useSettlingClip'
-import { useStreak } from '@/utils/streak'
 import { FeedbackScreen } from '../feedback/FeedbackScreen'
+import { useSolvePuzzle } from '../hooks/useSolvePuzzle'
 import { HardCanvas, type HardCanvasHandle } from './HardCanvas'
 import './HardMode.scss'
 
-const randomHardQuery = {
-  queryKey: puzzleKeys.randomHard,
-  queryFn: fetchLockedRandomHard,
-  staleTime: Infinity,
-  gcTime: Infinity,
-  refetchOnWindowFocus: false,
-  refetchOnReconnect: false,
-  refetchOnMount: false,
-} as const
-
 export function HardMode() {
-  const queryClient = useQueryClient()
   const canvasRef = useRef<HardCanvasHandle>(null)
-  const [gradedPuzzle, setGradedPuzzle] = useState<PuzzlePrompt>()
   const [allPlaced, setAllPlaced] = useState(false)
-  const { streak, recordResult } = useStreak('hard')
   const { settling, onAnimationEnd } = useSettlingClip()
+  const {
+    puzzle,
+    puzzleQuery,
+    solveMutation,
+    revealing,
+    loading,
+    loadError,
+    streak,
+    submit,
+    next,
+  } = useSolvePuzzle(
+    'hard',
+    ({ id, edges }: { id: string; edges: GraphEdge[] }) => solveHardPuzzle(id, edges),
+  )
 
-  const solveMutation = useMutation({
-    mutationFn: ({ id, edges }: { id: string; edges: GraphEdge[] }) => solveHardPuzzle(id, edges),
-    onSuccess: (result) => {
-      recordResult(result.correct)
-      clearHardPuzzleLock()
-      queryClient.removeQueries({ queryKey: puzzleKeys.randomHard })
-    },
-    onError: (error) => {
-      if (!isPuzzleNotFound(error)) {
-        return
-      }
-      setGradedPuzzle(undefined)
-      queryClient.removeQueries({ queryKey: puzzleKeys.randomHard })
-    },
-  })
-  const solved = solveMutation.isSuccess
-  const revealing = solveMutation.isPending || solved
-
-  const puzzleQuery = useQuery({
-    ...randomHardQuery,
-    enabled: !solved,
-  })
-
-  const puzzle = puzzleQuery.data ?? gradedPuzzle
   const graph = puzzle?.promptGraph
-  const loading = !puzzle && puzzleQuery.isPending
-  const loadError = !puzzle && puzzleQuery.isError
   const missingGraph = Boolean(puzzle && !graph)
 
   const stampHint = loadError
@@ -78,9 +46,8 @@ export function HardMode() {
           : 'Build the graph!'
 
   function handleNext() {
-    setGradedPuzzle(undefined)
     setAllPlaced(false)
-    solveMutation.reset()
+    next()
   }
 
   return (
@@ -143,8 +110,7 @@ export function HardMode() {
                   if (!puzzle) {
                     return
                   }
-                  setGradedPuzzle(puzzle)
-                  solveMutation.mutate({
+                  submit(puzzle, {
                     id: puzzle.id,
                     edges: canvasRef.current?.getGraphEdges() ?? [],
                   })
