@@ -5,45 +5,54 @@ import (
 	"testing"
 )
 
-func TestUpSectionStripsGooseDirectives(t *testing.T) {
-	sql := `-- +goose Up
+func TestUpSection(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		sql  string
+		want string
+	}{
+		{
+			name: "strips goose directives",
+			sql: `-- +goose Up
 CREATE TABLE puzzles (id TEXT PRIMARY KEY);
 
 -- +goose Down
 DROP TABLE puzzles;
-`
-	got := upSection(sql)
-	if got != "CREATE TABLE puzzles (id TEXT PRIMARY KEY);" {
-		t.Fatalf("got %q", got)
-	}
-}
-
-func TestUpSectionWithoutMarkersReturnsWholeFile(t *testing.T) {
-	sql := "CREATE TABLE puzzles (id TEXT PRIMARY KEY);"
-	if got := upSection(sql); got != sql {
-		t.Fatalf("got %q", got)
-	}
-}
-
-func TestUpSectionDownWithoutUpDoesNotTruncate(t *testing.T) {
-	sql := `CREATE TABLE puzzles (id TEXT PRIMARY KEY);
+`,
+			want: "CREATE TABLE puzzles (id TEXT PRIMARY KEY);",
+		},
+		{
+			name: "no markers returns whole file",
+			sql:  "CREATE TABLE puzzles (id TEXT PRIMARY KEY);",
+			want: "CREATE TABLE puzzles (id TEXT PRIMARY KEY);",
+		},
+		{
+			name: "down without up does not truncate",
+			sql: `CREATE TABLE puzzles (id TEXT PRIMARY KEY);
 
 -- +goose Down
-DROP TABLE puzzles;`
-	got := upSection(sql)
-	if got != strings.TrimSpace(sql) {
-		t.Fatalf("down-only file was truncated: %q", got)
-	}
-	if !strings.Contains(got, "DROP TABLE puzzles;") {
-		t.Fatalf("expected down SQL to remain when Up marker is missing, got %q", got)
-	}
-}
+DROP TABLE puzzles;`,
+			want: `CREATE TABLE puzzles (id TEXT PRIMARY KEY);
 
-func TestUpSectionUpWithoutDown(t *testing.T) {
-	sql := `-- +goose Up
+-- +goose Down
+DROP TABLE puzzles;`,
+		},
+		{
+			name: "up without down",
+			sql: `-- +goose Up
 CREATE TABLE puzzles (id TEXT PRIMARY KEY);
-`
-	if got := upSection(sql); got != "CREATE TABLE puzzles (id TEXT PRIMARY KEY);" {
-		t.Fatalf("got %q", got)
+`,
+			want: "CREATE TABLE puzzles (id TEXT PRIMARY KEY);",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := upSection(tt.sql)
+			if strings.TrimSpace(got) != strings.TrimSpace(tt.want) {
+				t.Fatalf("got %q, want %q", got, tt.want)
+			}
+		})
 	}
 }

@@ -17,6 +17,7 @@ uv run etl --help
 |---|---|
 | `etl/config.yaml` | Leaf languages, ancestor allowlist, reltypes, quality thresholds, source URLs, local `database_url` |
 | `etl/fixtures/` | Tiny committed graph + glosses for tests and local iteration |
+| `etl/tests/` | Pytest: pipeline units, CLI fixture flow, optional Postgres |
 | `data/raw/` | Downloaded parquet / JSONL, checksums, `manifest.json`, `NOTICE` (gitignored) |
 | `data/derived/` | Filtered edges, gloss index, lemma index (gitignored) |
 | `data/puzzles/` | JSONL snapshots (gitignored) |
@@ -275,8 +276,10 @@ uv run etl reset --all --reload --fixtures
 
 ## Tests
 
+From the repo root:
+
 ```bash
 uv run pytest
 ```
 
-Tests copy fixtures into a temp `ETL_DATA_DIR` and exercise refresh, generate, doctor, inspect, validate, stats, and reset without downloading dumps.
+Offline tests live in `etl/tests/` (a temp `ETL_DATA_DIR`, no dump download). Postgres cases are marked `integration` and skip unless `TEST_DATABASE_URL` is set (see the root README).

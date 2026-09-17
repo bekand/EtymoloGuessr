@@ -1,0 +1,104 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache-dependency-path: backend/go.sum
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: ETL tests
+        run: uv sync --extra dev && uv run pytest -m "not integration"
+
+      - name: API tests
+        working-directory: backend
+        run: go test ./...
+
+      - name: UI tests
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile && pnpm test && pnpm lint
+
+  integration:
+    runs-on: ubuntu-latest
+    needs: offline
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache-dependency-path: backend/go.sum
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Test stack
+        run: docker compose -f docker-compose.test.yml up -d --wait --build
+
+      - name: Wait for API
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:18080/health; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "API did not become healthy"
+          docker compose -f docker-compose.test.yml logs
+          exit 1
+
+      - name: ETL + API integration
+        env:
+          TEST_DATABASE_URL: postgres://etymoguessr:etymoguessr@localhost:5433/etymoguessr?sslmode=disable
+        run: |
+          uv sync --extra dev
+          uv run pytest -m integration
+          (cd backend && go test -p 1 ./...)
+
+      - name: E2E
+        working-directory: frontend
+        env:
+          TEST_DATABASE_URL: postgres://etymoguessr:etymoguessr@localhost:5433/etymoguessr?sslmode=disable
+          E2E_API_URL: http://localhost:18080
+          CI: "true"
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec playwright install --with-deps chromium
+          pnpm test:e2e
+
+      - name: Stop test stack
+        if: always()
+        run: docker compose -f docker-compose.test.yml down -v

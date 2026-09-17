@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 import pytest
@@ -10,12 +9,6 @@ from typer.testing import CliRunner
 from etl.cli import app
 
 runner = CliRunner()
-
-
-@pytest.fixture()
-def data_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    monkeypatch.setenv("ETL_DATA_DIR", str(tmp_path))
-    return tmp_path
 
 
 def test_help():
@@ -113,9 +106,16 @@ def test_generate_requires_derived(data_home: Path):
     assert result.exit_code != 0
 
 
-def test_generate_verbose_prints_stage_timings(data_home: Path):
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["generate", "-v", "--n", "10", "--dry-run", "--seed", "1"],
+        ["-v", "generate", "--n", "2", "--dry-run"],
+    ],
+)
+def test_generate_verbose_prints_stage_timings(data_home: Path, argv: list[str]):
     assert runner.invoke(app, ["refresh", "--fixtures"]).exit_code == 0
-    result = runner.invoke(app, ["generate", "-v", "--n", "10", "--dry-run", "--seed", "1"])
+    result = runner.invoke(app, argv)
     assert result.exit_code == 0, result.output
     err = result.stderr
     assert "[generate] load derived edges" in err
@@ -125,13 +125,6 @@ def test_generate_verbose_prints_stage_timings(data_home: Path):
     assert "s (total" in err
 
 
-def test_generate_verbose_via_global_flag(data_home: Path):
-    assert runner.invoke(app, ["refresh", "--fixtures"]).exit_code == 0
-    result = runner.invoke(app, ["-v", "generate", "--n", "2", "--dry-run"])
-    assert result.exit_code == 0, result.output
-    assert "[generate] load derived edges" in result.stderr
-
-
 def test_ids_stable(data_home: Path):
     runner.invoke(app, ["refresh", "--fixtures"])
     runner.invoke(app, ["generate", "--n", "0", "--seed", "99"])
@@ -139,17 +132,6 @@ def test_ids_stable(data_home: Path):
     runner.invoke(app, ["generate", "--n", "0", "--seed", "99"])
     second = [json.loads(l) for l in (data_home / "puzzles" / "puzzles.jsonl").read_text().splitlines() if l]
     assert [p["id"] for p in first] == [p["id"] for p in second]
-
-
-def test_generate_default_min_quality_and_no_placeholders(data_home: Path):
-    assert runner.invoke(app, ["refresh", "--fixtures"]).exit_code == 0
-    result = runner.invoke(app, ["generate", "--n", "5", "--stdout", "--seed", "1"])
-    assert result.exit_code == 0, result.output
-    puzzles = json.loads(result.stdout)
-    assert len(puzzles) >= 1
-    for p in puzzles:
-        assert p["quality_score"] >= 3
-        assert all(not c["gloss"].startswith("(unrelated)") for c in p["choices"])
 
 
 def test_validate_rejects_bad_file(tmp_path: Path):

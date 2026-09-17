@@ -27,10 +27,15 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["etl"]
+exclude = ["etl/tests", "etl/tests/**"]
 
 [tool.hatch.build]
 include = ["etl/config.yaml", "etl/fixtures/**"]
+exclude = ["etl/tests", "etl/tests/**"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["etl/tests"]
 pythonpath = ["."]
+markers = [
+    "integration: needs Postgres via TEST_DATABASE_URL",
+]

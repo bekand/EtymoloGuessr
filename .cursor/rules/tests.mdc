@@ -1,0 +1,26 @@
+---
+description: Prefer extending existing tests over new hyper-specific cases
+alwaysApply: true
+---
+
+# Tests: extend existing cases
+
+When changing or adding a feature, cover it with tests — but read the existing suite first.
+
+Prefer **new assertions on an existing test** that already exercises the same unit, fixture, or flow. Add a new test file or function only when no current case is a natural home (different setup, different entrypoint, or a regression that would make an existing test unreadable).
+
+```python
+# ❌ BAD — extra test that only exists for one new field
+def test_generate_omits_prompt_graph():
+    puzzles = generate(...)
+    assert "prompt_graph" not in puzzles[0]
+
+# ✅ GOOD — same check on the pipeline/CLI test that already builds puzzles
+def test_refresh_fixtures_generate_validate_inspect(...):
+    ...
+    for p in puzzles:
+        assert "prompt_graph" not in p
+        assert p["quality_score"] >= 3  # new behavior
+```
+
+Same idea in Go and frontend tests: fold the new expectation into `TestSolve`, `test_help`, etc., rather than a one-off `TestXDoesYWhenZ`.

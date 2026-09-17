@@ -1,0 +1,24 @@
+---
+description: Run Python through uv and the project virtualenv
+alwaysApply: true
+---
+
+# Python: uv + venv
+
+This repo’s Python lives in the uv-managed virtualenv at `.venv`. Do not call system `python`, `python3`, or a globally installed `pytest`.
+
+```bash
+# ❌ BAD — system interpreter / tools
+python etl/generate.py
+python3 -m pytest
+pytest
+
+# ✅ GOOD — uv uses .venv
+uv run python script.py
+uv run pytest
+uv run etl generate --n 10
+```
+
+- Install / refresh deps from the repo root with `uv sync` (add `--extra dev` when tests are needed).
+- Prefer `uv run <command>` over activating `.venv` by hand. If a shell must be inside the venv, use `.venv/Scripts/python` (Windows) or `.venv/bin/python` after `uv sync`.
+- ETL CLI entrypoint is `uv run etl …`, not a raw module path, unless you are debugging a script that is not the CLI.

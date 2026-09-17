@@ -78,4 +78,7 @@ func TestChoiceCorrect(t *testing.T) {
 	if ChoiceCorrect(p, "c1") {
 		t.Fatal("expected incorrect")
 	}
+	if ChoiceCorrect(nil, "c0") || ChoiceCorrect(p, "") {
+		t.Fatal("nil puzzle or empty id should be incorrect")
+	}
 }

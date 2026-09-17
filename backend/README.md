@@ -128,14 +128,14 @@ docker compose up --build
 
 API is `:8080`, Postgres `:5432`. Schema is applied when the API container starts.
 
-### Tests (no database)
+### Tests
 
 ```bash
 cd backend
 go test ./...
 ```
 
-HTTP tests use an in-memory store. Scoring and prompt stripping are unit-tested in `internal/puzzle`.
+HTTP tests use an in-memory store. Scoring and prompt stripping are unit-tested in `internal/puzzle`. Store and `/health` tests against Postgres skip unless `TEST_DATABASE_URL` is set (throwaway compose on port 5433; see the root README). Run `go test -p 1 ./...` when that DSN is set so package tests do not share the database in parallel.
 
 ## Environment
 

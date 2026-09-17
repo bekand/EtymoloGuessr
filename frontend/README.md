@@ -22,9 +22,15 @@ pnpm dev      # Vite dev server (proxies /api → Go on :8080)
 pnpm build    # typecheck + production build
 pnpm lint     # eslint
 pnpm preview  # preview production build
+pnpm test     # Vitest (unit + MSW)
+pnpm test:e2e # Playwright against the test API (see root README)
 ```
 
 Dev expects the API at `http://localhost:8080`. The client calls `/puzzles/...`; Vite exposes that as `/api/puzzles/...` and strips `/api` before forwarding. Override with `VITE_API_URL` (no `/api` suffix), e.g. `http://localhost:8080`.
+
+## Tests
+
+`pnpm test` runs Vitest (shuffle/layout units, puzzle-lock + EasyMode with MSW). `pnpm test:e2e` runs Playwright Easy and Hard journeys against `docker-compose.test.yml` (see the root README). Install the browser once with `pnpm exec playwright install chromium`.
 
 ## Layout
 

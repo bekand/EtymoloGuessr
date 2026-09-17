@@ -1,6 +1,6 @@
 ---
 name: Etymology game plan
-overview: "Greenfield etymology guessing game: Python ETL, Go API + Postgres, and a React UI on a paper/ink design system (typewriter type, post-it choices, card graphs)."
+overview: "EtymoGuessr v1 is playable locally: Python ETL, Go API + Postgres, React paper/ink UI (Easy MC + Hard graph editor). Remaining work is puzzle quality (homographs, case-qualifier glosses) and a diamond test suite."
 todos:
   - id: etl-cli
     content: "Python Typer CLI: refresh, generate (--n, stdout/jsonl/db), reset, doctor, stats, inspect, validate, load, disable"
@@ -9,43 +9,59 @@ todos:
     content: Filter languages/reltypes, persist cleaned graph + gloss index as reusable artifacts
     status: completed
   - id: etl-puzzles
-    content: Extract 3–5 node LCA puzzles, divergence filter, MC distractors, hashed ids, rejection log
+    content: Extract LCA puzzles, quality filters, MC distractors, hashed ids, rejection funnel
     status: completed
   - id: db-api
-    content: Postgres puzzle schema + Go API GET random / POST solve (hide gold until submit)
-    status: pending
+    content: Postgres puzzle schema + Go API GET random/by-id / POST solve (hide gold until submit)
+    status: completed
   - id: design-system
-    content: Paper/ink tokens + primitive UI (Sheet, IndexCard, PostIt, InkButton, type) before game screens
-    status: pending
+    content: Paper/ink tokens + primitives (Sheet, IndexCard, PostIt, InkButton, Stamp, Colophon, graph)
+    status: completed
   - id: frontend-easy
-    content: "React easy mode: two words, MC, React Flow reveal"
-    status: pending
+    content: "React easy mode: two words, MC, React Flow reveal with reltype labels"
+    status: completed
   - id: frontend-hard
-    content: "React Flow hard mode: place 1–3 ancestors, draw edges, score edge-set match"
-    status: pending
+    content: "Hard mode: all nodes in palette, place then draw child→ancestor edges, score exact edge-set"
+    status: completed
   - id: compose
-    content: Docker Compose for Postgres + API + frontend; CC BY-SA attribution in UI
+    content: Docker Compose for Postgres + API; CC BY-SA attribution in UI
+    status: completed
+  - id: skip-case-qualifiers
+    content: Strip/skip Wiktionary [with genitive]-style case-government glosses in first_gloss; reject leftover qualifier-only LCAs
+    status: pending
+  - id: homograph-allowlist
+    content: Gloss-aligned ancestor-edge allowlist from kaikki etymology_templates so mixed-etymology nodes (English son) walk the sense that matches the stored gloss
+    status: pending
+  - id: diamond-tests
+    content: "Diamond suite: move ETL tests under etl/tests/, Vitest/Playwright, Postgres integration, CI"
+    status: pending
+  - id: doc-sync
+    content: "Catch up frontend README (Hard + Router), etl README defaults (n=0, min_quality=4), OpenAPI GET /puzzles/{id}"
     status: pending
 isProject: false
 ---
 
-# Etymology guessing game (v1)
+# EtymoGuessr
 
-Greenfield project (workspace is empty). Wiktionary-derived data is noisy and **has no meanings**, so the pipeline must join glosses from a second source and **prefer semantic-shift pairs** so multiple-choice is not trivial (EN *father* / DE *Vater* both mean “father”).
+**Status:** v1 is playable locally. Python ETL writes puzzle rows, a Go API serves one at a time (hiding the answer until submit), and a React UI plays Easy and Hard. This plan is the product/architecture source of truth; layer READMEs hold commands.
 
-## Product (v1)
+Wiktionary-derived data is noisy and **has no meanings**, so the pipeline joins glosses from kaikki/wiktextract and **prefers semantic-shift pairs** so multiple-choice is not trivial (EN *father* / DE *Vater* both mean “father”).
 
-**Easy:** two modern words (from EN / ES / PT / DE) → pick the common ancestor’s meaning from 4 choices → on success, show a read-only etymology graph.
+## Product (v1, shipped)
 
-**Hard:** same puzzle family, 3–5 nodes. Leaves are placed; the player drag-and-drops ancestor node(s) and draws edges (React Flow). No inventing extra nodes; no relation-type labels on edges in v1. Score by comparing the submitted edge set to the gold graph (exact match to win; optional later: precision/recall partial credit).
+**Easy** (`/easy`): two modern words (EN / ES / PT / DE) on index cards → pick the common ancestor’s meaning from 4 post-its → on submit, cards/choices hide and a read-only etymology graph appears (ink edges **with** relation labels). Index cards have an Explain control for the leaf gloss.
 
-**Out of scope for v1:** accounts, scoring persistence, leaderboards (schema can leave room). Daily challenge / explore-the-full-graph can wait.
+**Hard** (`/hard`): same puzzle family, but only rows with **≥ 4 graph nodes**. **No nodes start on the blotter** — leaves and ancestors all sit in a post-it palette. Place every card (click or drag), then draw directed edges **child → ancestor**. Player edges have no relation-type labels. Submit is disabled until every node is placed (hint: “Build the graph!”). Score is an exact directed edge-set match (ignore order and `reltype`).
 
-**License:** etymology-db is [CC BY-SA 3.0](https://github.com/droher/etymology-db). Attribute Wiktionary + etymology-db in the UI and keep derived puzzle data share-alike.
+**Home** (`/`): Easy / Hard stamps. React Router, not in-memory screen state.
+
+**Out of scope for v1:** accounts, scoring persistence, leaderboards (`users` / `scores` tables exist so later work does not rewrite schema). Daily challenge / explore-the-full-graph can wait. No dark theme (paper metaphor). Partial credit for hard edges (precision/recall) is optional later.
+
+**License:** etymology-db is [CC BY-SA 3.0](https://github.com/droher/etymology-db). Attribute Wiktionary + etymology-db in the UI colophon; derived puzzle data stays share-alike. Do **not** commit `data/puzzles/` snapshots.
 
 ## Why not query the live etymology graph at request time
 
-Pregenerate puzzles. Serving becomes “pick a row, hide the answer, check a submission.” The graph walk, LCA search, gloss join, and distractor generation are slow, messy, and should be inspectable offline.
+Pregenerate puzzles. Serving is “pick a row, hide the answer, check a submission.” The graph walk, LCA search, gloss join, and distractor generation are slow, messy, and should be inspectable offline.
 
 ```mermaid
 flowchart LR
@@ -56,7 +72,7 @@ flowchart LR
   out[stdout or JSONL]
   pg[(Postgres puzzles)]
   api[Go API]
-  ui[React]
+  ui[React Vite]
   refresh --> raw
   raw --> graph
   graph --> gen
@@ -66,168 +82,162 @@ flowchart LR
   api --> ui
 ```
 
+**Local loop:** `docker compose up --build -d` (Postgres 16 + API on `:8080`), `uv run etl reset --all --reload --fixtures` for a tiny playable set, `cd frontend && pnpm dev` (Vite proxies `/api` → `:8080`). Full Wiktionary puzzles: `etl refresh` then `etl generate --db` (see [etl/README.md](etl/README.md)). Frontend is **not** in Compose.
 
+## Data pipeline (Python CLI) — as built
 
-## Data pipeline (Python CLI)
+Typer app: `uv run etl …`. Staged artifacts so generate does not re-download or rebuild the graph every time. Config in [etl/config.yaml](etl/config.yaml). `DATABASE_URL` overrides `database_url` in config. Large dumps stay in `data/` and are **gitignored**; pin source URLs in config (checksums optional, currently unset).
 
-One Typer (or Click) app, e.g. `uv run etl …`, with **staged artifacts** so generate does not re-download or rebuild the 4M-edge graph every time. Config in `etl/config.yaml` (leaf languages, ancestor allowlist, reltypes, quality thresholds). `DATABASE_URL` from env. Large dumps stay in `data/` and are **gitignored**; pin source URLs + checksums in config.
-
-Source: [droher/etymology-db](https://github.com/droher/etymology-db) (`etymology.parquet`, Dec 2023). Edges: `term` / `lang` → `reltype` → `related_term` / `related_lang`. Glosses are **not** in that file — join [kaikki.org](https://kaikki.org/) / wiktextract dumps for the languages we keep.
+Source: [droher/etymology-db](https://github.com/droher/etymology-db) (`etymology.parquet`, Dec 2023). Edges: `term` / `lang` → `reltype` → `related_term` / `related_lang`. Glosses from [kaikki.org](https://kaikki.org/) / wiktextract. English gloss is canonical for v1.
 
 ### Layout
 
-- `data/raw/` — parquet, gloss JSONL, checksums, `manifest.json` (url, date, hash)
-- `data/derived/` — filtered edges, graph, gloss index keyed by `(lang, term)`
-- `data/puzzles/` — optional JSONL snapshots
-- `data/reports/` — rejection funnel, stats
-- `etl/fixtures/` — tiny committed slice for tests (not the full dump)
+- `data/raw/` — parquet, gloss JSONL, checksums, `manifest.json`, `NOTICE`
+- `data/derived/` — filtered edges parquet, `gloss_index.json`, `lemma_index.json`
+- `data/puzzles/` — optional JSONL snapshots (not in git)
+- `data/reports/` — `funnel.json`, `stats.json`
+- `etl/fixtures/` — tiny committed slice for tests and `--fixtures`
 
-### Stages (not one mega-script)
+### Current generate defaults (`etl/config.yaml`)
 
-1. **Reduce graph** — keep leaf langs EN/ES/PT/DE (Wiktionary names); keep ancestor/path langs (Latin, OE, OHG, PGmc, PIE, Old French, Old Norse, Arabic, …) in config; keep `inherited_from`, `borrowed_from`, `derived_from`, `root`, `cognate_of`, `doublet_with`; drop null related terms, junk MWEs, affix/compound/group noise.
-2. **Index glosses** — first gloss per `(lang, term)`; skip puzzles with no LCA gloss.
-3. **Extract puzzles** — pairs of modern leaves with a short connecting subgraph / LCA; **3–5 nodes**; prefer cross-language; down-rank ES–PT clones; divergence filter (leaf/LCA gloss overlap); 4-way MC distractors from other LCAs.
-4. **Ids** — content hash of `(leaf_a, leaf_b, lca, graph-edges)` so reruns upsert instead of duplicating. `--seed` for sampling and choice shuffle.
+- `n: 0` — emit every survivor (full pass)
+- `min_quality: 4`
+- `max_nodes: 9` (graphs larger than 9 are `too_big`; no minimum at generate time)
+- `n_choices: 4`
+- `seed: 89`
 
-### Commands
+### Stages
 
-`**etl refresh**` — fetch etymology-db + gloss dumps into `data/raw/` if missing or `--force`. Verify checksums. Do **not** wipe `puzzles` in Postgres. Then rebuild derived graph + gloss index (`--skip-derived` to download only).
+1. **Reduce graph** — leaf langs English / Spanish / Portuguese / German; ancestor allowlist in config (Latin through PIE, plus Ancient Greek, Arabic, Hebrew, Persian, Nahuatl, Sanskrit, …); keep `inherited_from`, `borrowed_from`, `derived_from`, `root`, `cognate_of`, `doublet_with`; drop null related terms, MWEs, affix noise.
+2. **Index glosses** — first *lexical* gloss per `(lang, term)`; skip `form_of` / grammatical-form senses; join colon-ending qualifier lists onto the continuation (`Of a person:` + `smug` → one gloss). Form-only entries inherit the citation lemma’s gloss and are recorded in `lemma_index.json`.
+3. **Extract puzzles** — two modern leaves and their closest connecting subgraph / LCA. Ancestor walks use `inherited_from` / `borrowed_from` / `derived_from` / `root` only.
+4. **Ids** — SHA-256 of `(leaf_a, leaf_b, lca, gold edges)` so `etl load` upserts instead of duplicating. `--seed` for sampling and choice shuffle.
 
-`**etl generate**` — read derived artifacts (error if missing: tell user to `refresh`). Options:
+### Quality score (integer 0–5)
 
-- `--n N` (default from config; `0` = all that pass filters)
-- `--seed`
-- `--lang-pair en-de` (repeatable)
-- `--min-quality`
-- **sink (mutually exclusive):** `--stdout` (JSON for inspection), `--jsonl PATH` (default `data/puzzles/puzzles.jsonl`), `--db` (upsert into Postgres)
-- `--dry-run` — counts and funnel only, no write
+Start at 5:
 
-`**etl reset**` — regenerate from scratch, with blast radius flags:
+| Penalty | Points |
+|---|---|
+| Same leaf language | −3 (same-lang pairs top out at **2**, so default `min_quality` 4 drops them) |
+| Spanish–Portuguese whose leaf terms share the first 3 characters | −2 (unrelated ES–PT pairs are not penalized) |
+| LCA is a modern leaf language (EN/ES/PT/DE) | −1 |
+| High overlap (either leaf **term** still appears as a content token in the LCA gloss) | −1 |
 
-- `--puzzles` (default) — truncate/delete puzzle rows; later **do not** drop `users`/`scores`
-- `--derived` — delete `data/derived/`
-- `--raw` — delete downloads (next generate must refresh)
-- `--all` — raw + derived + puzzles
-- `--reload` — then `refresh` + `generate --db` in one shot
+### Filters that stuck (rejection funnel)
 
-Never `DROP DATABASE` from ETL. Go owns schema migrations; ETL assumes tables exist (`etl doctor` checks).
+- **Proper-noun leaves** — EN/ES/PT term starts uppercase (`proper_noun_leaf`). German exempt.
+- **Short / unglossed LCA** — term < 3 chars (`lca_term_too_short`); missing gloss (`no_gloss`).
+- **Form-only LCA** — rewrite gold node to the citation lemma (`Latin:addere` → `Latin:addō`); leftover grammatical glosses (`accusative … of …`) → `inflection_lca`. Lexical homographs stay (*factum* “deed”, not *faciō*).
+- **Leaf = LCA** — first content word of either leaf term/gloss equals first content word of LCA term/gloss (`lca_equals_leaf`). Catches *dragon* vs “dragon, monster”.
+- **Same meaning** — both leaf terms still appear in the LCA gloss (`same_meaning`). Function words ignored.
+- **Leaf reuse** — each `(lang, term)` appears as a leaf in at most one puzzle per `generate` batch.
+- **Distractors** — from other candidates’ LCA glosses. Fewer than 3 distinct real glosses → `insufficient_distractors` (**no placeholders**).
 
-**Also ship these — they save more time than a fancier generator:**
+### Commands (behavior that matters)
 
-- `**etl doctor**` — raw present + checksums, derived present, Postgres reachable, migrations applied, disk estimate.
-- `**etl stats**` — edge counts by lang/reltype; puzzle counts by lang-pair; rejection reasons (`no_gloss`, `too_big`, `same_meaning`, `es_pt_trivial`, …). Write `data/reports/funnel.json`.
-- `**etl inspect [id|--random|--lang-pair]**` — print one puzzle as readable text (leaves, glosses, choices, gold edges) without the UI.
-- `**etl validate [PATH|--db]**` — schema, 4 choices, unique ids, graph 3–5 nodes, leaves in prompt, gold edges subset of node ids, distractors ≠ correct.
-- `**etl load PATH**` — JSONL → DB upsert without regenerating (fixtures, sharing a reviewed set).
-- `**etl disable ID**` — `enabled=false` after a bad eyeball (API skips these).
+- `etl refresh` — fetch dumps if missing (`--force` re-download); then rebuild derived. `--fixtures` copies `etl/fixtures/` (no network). Does **not** wipe Postgres puzzles. `--skip-derived` downloads only.
+- `etl generate` — reads derived only (errors if missing). Sinks are mutually exclusive: `--stdout` / `--jsonl PATH` / `--db`. Default file sink is `data/puzzles/puzzles.jsonl`. `--dry-run` = funnel only.
+- **JSONL and Postgres are separate.** `generate` never reads an existing puzzle file. `generate --db` **truncates `puzzles` and `scores`** (FK), then upserts from a fresh graph walk — so rejected leftovers (old inflection LCAs) disappear. `etl load PATH` upserts a file without truncate or regenerate.
+- `etl reset` — never `DROP DATABASE` or drop `users` / `scores` tables. `--puzzles` truncates puzzle + score rows. `--reload` force-refreshes, generates, writes JSONL, and `--db`.
+- Also: `doctor`, `stats`, `inspect`, `validate`, `disable`. Go owns schema migrations; ETL assumes `puzzles` exists (`etl doctor` checks). A missing DB does not fail doctor (JSONL-only is valid).
 
-Optional later: `etl sample-fixture` to cut a tiny graph for CI.
-
-### Graph rules (unchanged intent)
-
-NetworkX (or similar): node = `(lang, term)`. Walk from modern leaves toward ancestors. Reject huge PIE soup and trivial 2-node borrows. English gloss canonical for v1.
-
-### Operational notes
-
-- Full refresh is tens of minutes and hundreds of MB; the common loop is `generate --stdout` / `--n 20` against derived data.
-- `generate` does **not** implicit-refresh (avoids surprise downloads).
-- Structured log counts per filter stage.
-- Copy license notes into `data/raw/NOTICE` on refresh; UI colophon stays separate.
+`generate --n > 0` early-exits once enough survivors exist. `--n 0` is the full pass. The API has **no puzzle cache**; after `--db`, the next `GET /puzzles/random` sees new rows. The UI may still show a locked id until 404 / Next.
 
 ## Database (Postgres)
 
-Pregenerated puzzles, not the full 4M-edge dump.
+Pregenerated puzzles only — not the 4M-edge dump.
 
-- `puzzles`: `id` (content hash), `enabled` (default true), one row usable as both modes, `leaf_a`/`leaf_b`, `answer_graph` (gold; prompt derived at serve time), `choices`, `correct_choice`, `quality_score`, `lang_pair`, `source`.
-- Hard mode can reuse the same `answer_graph`; API strips edges (and maybe ancestor labels) depending on mode. Do not duplicate gold as a stored `prompt_graph`.
-- Empty `users` / `scores` tables only if you want migrations ready; no auth in v1.
+- `puzzles`: `id` (content hash), `enabled` (default true), `leaf_a` / `leaf_b`, `answer_graph` (gold; prompt derived at serve time), `choices`, `correct_choice`, `quality_score`, `lang_pair`, `source`.
+- **Canonical gold is `answer_graph` only.** No `prompt_graph` column or JSONL field. Load rejects payloads that still include `prompt_graph`.
+- Empty `users` / `scores` for later auth/leaderboards. ETL must never drop those tables.
 
-## Backend: Go (not Python)
+## Backend: Go — as built
 
-The API is a thin JSON layer over pregenerated rows. Python stays **only** for ETL. A second language is justified here: the ETL is a batch graph/NLP job; the server is long-lived HTTP + Postgres + (later) sessions.
+Thin JSON over pregenerated rows. Python stays **only** for ETL. Stack: Go 1.24+ `net/http`, `pgx`, embedded SQL migrations (`AUTO_MIGRATE=true` on boot). Single binary in Docker. CORS for Vite.
 
-### Alternatives considered
+### Endpoints
 
-This v1 API is ~two endpoints, JSON in/out, `jsonb` graphs, CORS, later cookie/JWT auth and leaderboards. All four stacks can do that. Differences are operational weight and how well they fit *later* features.
+- `GET /health` — ping Postgres.
+- `GET /puzzles/random?mode=easy|hard` — only `enabled = true`. Query: `langPair`, `minQuality`. Hard also requires **≥ 4 nodes**. `404` if none match.
+- `GET /puzzles/{id}?mode=` — used by the UI puzzle lock to re-fetch after refresh; 404 clears the lock if `--db` deleted the row. (OpenAPI does not list this yet.)
+- `POST /puzzles/{id}/solve` — `{ mode, choiceId }` or `{ mode, edges }`; returns `{ correct, goldGraph, choices, correctChoice }`.
 
-- **Go (chosen).** `net/http` (Go 1.22+ routing) or Chi; `pgx` for Postgres; `encoding/json` for graphs. Single static binary in Docker, fast compile, trivial random-row + edge-set compare. Auth later: middleware + sessions (e.g. `gorilla/sessions` or JWT). Leaderboards: SQL `ORDER BY score`. No runtime to babysit. Weakest fit only if you later want Phoenix-style live presence as a first-class feature.
-- **Elixir / Phoenix.** Best of this list for live leaderboards, presence, and channels. JSON + Ecto + Postgres is excellent. Cost: BEAM, Mix, a second ecosystem beside Python and Node, and more moving parts than the v1 endpoints need. Strong upgrade path *if* realtime becomes core.
-- **Java / Spring Boot.** Unbeatable library coverage (Spring Security, JPA). For two endpoints it is heavy: JVM image, annotation/config surface, slower inner loop than Go. Reasonable if you already live in Spring; otherwise overkill.
-- **Scala (http4s or Play, circe, doobie/skunk).** Nicest typed JSON codecs for `answer_graph`. Smallest pool of tooling/help, sbt/Mill complexity, and slower iteration than Go for a CRUD-shaped API. Skip unless you want FP/types as a personal goal.
+**Never send gold on GET.** Easy omits `promptGraph` entirely (the two words are `leafA` / `leafB`). Hard sends all nodes, ancestor `gloss` stripped, `edges: []`. Terms stay so the player can place known ancestor cards. `choices` always go out unmarked; Hard UI ignores them.
 
-TypeScript/Node was not requested; it would share types with React but you asked to leave Python *and* pick among JVM/Go/BEAM.
+Graph check: canonicalize node ids, compare directed edge sets (ignore layout and `reltype`).
 
-### Go shape for v1
+OpenAPI: [backend/openapi.yaml](backend/openapi.yaml). Tests: in-memory store + `internal/puzzle` unit tests (`go test ./...`).
 
-- `GET /puzzles/random?mode=easy|hard` — prompt without `correct_choice` / gold edges.
-- `POST /puzzles/{id}/solve` — `{ choiceId }` or `{ edges: [{from, to}] }`; returns `{ correct, goldGraph, choices }`.
-- `pgx` + a small migrations tool (`goose` or `atlas`).
-- CORS for Vite. Docker: scratch/distroless binary.
-- Never send the gold answer on GET. Graph check: canonicalize node ids, compare directed edge sets (ignore layout).
+## Frontend: React + TypeScript + Vite — as built
 
-OpenAPI is optional; a shared JSON example in `backend/openapi.yaml` or `packages/puzzle-schema.json` is enough until auth exists.
-
-## Frontend: React + TypeScript + Vite + React Flow
-
-- Home: pick easy / hard (two paper folders or stamped buttons).
-- Easy: two word **index cards**, four meaning **post-its**, then **read-only** React Flow on a desk blotter (nodes as cards; edges as ink strokes).
-- Hard: same canvas; **leaves locked**; ancestor cards in a post-it palette; connect with ink; Submit stamp. 3–5 nodes only.
-- Attribution footer (Wiktionary / CC BY-SA) as a typeset colophon.
-- Shared graph component for reveal vs editor (one `nodes`/`edges` model). Custom React Flow node/edge types so the graph uses the same tokens as the rest of the UI.
+- pnpm, React 19, Sass tokens (no Tailwind), IBM Plex Mono + Serif, TanStack Query, React Flow, React Router, React Compiler.
+- Routes: `/`, `/easy`, `/hard`.
+- Primitives in `frontend/src/ui/`: `Sheet`, `IndexCard`, `PostIt`, `InkButton`, `Stamp`, `Colophon`, `EtymologyNode` + `InkEdge`.
+- Easy and Hard share `FeedbackScreen` (verdict + gold graph).
+- Puzzle lock in `localStorage` so refresh does not swap the round. Choice order and post-it colors shuffle from the puzzle id.
+- Responsive breakpoints: mobile / tablet / desktop (`_breakpoints.scss`).
 
 ### Design system (paper, ink, typewriter)
 
-A **small token + primitive layer** in `frontend/src/ui/` — not a skeuomorphic theme pack. Screens compose primitives; new modes add layouts, not new palettes.
-
-**Color tokens** (CSS variables, cream desk not pure white):
-
-- `--paper`, `--paper-ruled`, `--paper-kraft` — page backgrounds
-- `--ink`, `--ink-muted`, `--ink-faint` — near-black / graphite (WCAG AA on paper)
-- `--rule` — hairline for underlines and card edges
-- Post-it accents, one each, low saturation so type stays readable: `--note-yellow`, `--note-pink`, `--note-blue`, `--note-green` (MC options / palette items)
-- `--stamp-red` — primary actions and wrong-state, used sparingly
-- No dark theme in v1 (paper metaphor breaks); high-contrast ink on cream is the accessibility story
-
-**Type:** typewriter-inspired but **legible**. Skip novelty “Special Elite”-only UI.
-
-- **IBM Plex Mono** — words, language tags, buttons, graph labels (fixed-width, typewriter feel)
-- **IBM Plex Serif** — longer glosses and help text (ink-on-paper, easier than all-mono)
-- Tracking slightly open on stamps/labels; body at 16–18px; avoid all-caps paragraphs
-
-**Motion/texture:** almost none. 1–2px paper stack offset, optional 0.5–1° tilt on post-its only. No torn-edge PNGs, no paper-grain wallpaper (noise filters fight React Flow). Edges = 1px `--rule`, not drop shadows.
-
-**Primitives (extensible set):**
-
-- `Sheet` — full “page” / desk
-- `IndexCard` — puzzle words, graph nodes
-- `PostIt` — MC choices, hard-mode palette
-- `InkButton` / `Stamp` — submit, mode pick (underline or rubber-stamp border, not Material buttons)
-- `Colophon` — footer attribution
-- Graph: `EtymologyNode` + `InkEdge` registered with React Flow
-
-**Do not:** Tailwind-default purple, glassmorphism, or a second accent system per mode. Language can be a small ink stamp on a card (`EN`, `DE`), not a color-coded rainbow.
+Unchanged intent. Cream desk, graphite ink, low-sat post-its, stamp-red used sparingly. No dark theme. Language is an ink stamp on a card (`EN`, `DE`), not a color-coded rainbow. Motion is almost none (stack offset, slight post-it/stamp tilt).
 
 ## Repo layout
 
-- `[etl/](etl/)` — Python Typer CLI, `config.yaml`, fixtures
-- `[backend/](backend/)` — Go module (`cmd/api`, `internal/...`)
-- `[frontend/](frontend/)` — React (`src/ui` tokens + primitives, then screens)
-- `[docker-compose.yml](docker-compose.yml)` — Postgres + Go API (+ optional frontend)
+- [etl/](etl/) — Python Typer CLI, `config.yaml`, fixtures
+- [backend/](backend/) — Go module (`cmd/api`, `internal/...`)
+- [frontend/](frontend/) — React (`src/ui` primitives, `src/features` screens)
+- [tests/](tests/) — ETL pytest (planned move to `etl/tests/`)
+- [docker-compose.yml](docker-compose.yml) — Postgres + API only
 
-## Quality and the main risks
+## Quality risks (still true)
 
-- **Noise:** Wiktionary parse errors → strict filters, manual spot-check of ~50 puzzles, `quality_score` + ability to disable rows.
-- **Too-easy MC:** divergence filter + distractors that are plausible ancestor meanings, not random dictionary words.
-- **ES/PT overlap:** require extra depth or a non-obvious LCA, or mix with EN/DE.
-- **Reconstructed forms:** keep `*` on terms; gloss from Wiktionary proto entries when present.
-- **Hard-mode UX:** do not ask players to guess relation types or invent nodes in v1.
+- **Noise:** Wiktionary parse errors → filters, `quality_score`, `etl disable`.
+- **Too-easy MC:** divergence / identity filters + real LCA-gloss distractors.
+- **ES/PT overlap:** 3-character prefix −2, plus identity filters; mix with EN/DE via quality sort.
+- **Reconstructed forms:** keep `*` on terms; gloss from proto entries when present.
+- **Hard-mode UX:** do not ask players to guess relation types or invent nodes.
+- **Homographs:** one node id per `(lang, term)` collapses senses (English *son* = offspring gloss + Spanish-music edge). Fix planned below; do not skip all mixed leaves.
+- **Case-government glosses:** kaikki stores `[with genitive]` as the first gloss part; that can become the MC answer until `first_gloss` skips/strips those qualifiers.
 
-## Suggested build order
+## Decisions that diverged from the original plan
 
-1. ETL CLI + derived artifacts → `generate --stdout --n 20`; `inspect` / `validate`; then `--db` when Postgres exists.
-2. Postgres + Go API random + solve.
-3. Design tokens + primitives (`Sheet`, `IndexCard`, `PostIt`, `InkButton`).
-4. Easy UI + graph reveal on those primitives.
-5. Hard UI on the same puzzle payload and node types.
-6. Docker Compose so the game runs locally.
+These are settled. Do not silently revert them.
 
+| Topic | Original | Current |
+|---|---|---|
+| Graph size | 3–5 nodes | **Max 9**; no generate-time minimum. Hard API filters **≥ 4 nodes** (3-node “two leaves + one LCA” was trivial once leaves were unplaced). |
+| Hard UX | Leaves locked on the blotter; drag 1–3 ancestors | **All nodes start in the palette**; place then connect. |
+| Relation labels | None on edges in v1 | **Shown on gold/reveal**; still none while the player draws Hard edges. |
+| `prompt_graph` | Derive at serve time | Confirmed; Easy **omits** `promptGraph` (leaf-only graph was redundant). |
+| `generate --db` | Upsert | **Truncate puzzles + scores, then replace.** `load` is the merge path. |
+| `min_quality` | TBD | Config **4**. |
+| ES–PT quality | Always penalize | **−2 only if first 3 chars of leaf terms match.** |
+| Same-meaning | Gloss Jaccard | Leaf **term token** in LCA gloss; identity via **first content word**. |
+| Form-only LCA | Skip / `no_gloss` | **Rewrite node to citation lemma**; keep lexical homographs. |
+| Navigation | React state screens | **React Router** `/` `/easy` `/hard`. |
+| Compose frontend | Optional in compose | **Local Vite only.** |
+| Distractors | Plausible LCAs | **No placeholders.** |
+| `n` default | Sample size | **0 = all survivors.** |
+| OpenAPI | Optional | Shipped (minus `GET /puzzles/{id}`). |
+
+Backend language (Go, not Python/Elixir/Spring) is unchanged. Alternatives considered in the original plan still stand if this is ever revisited.
+
+## Remaining work
+
+Priority order for the next slice of product work:
+
+1. **Skip case-government glosses** — in `first_gloss`, treat leading `[with genitive]` / `[of place]` / similar as not the meaning (use the next part, or strip the prefix, or skip qualifier-only senses). Generate-time safety net: leftover qualifier-only LCA glosses → `inflection_lca`. Fold coverage into existing grammatical-form tests; then `etl refresh` + `generate --db`. Separate plan: skip-case-qualifiers.
+2. **Homograph allowlist** — parse kaikki `inh`/`bor`/`der`/`root` templates with the winning gloss; drop dump ancestor edges whose `related_term` is not in that list; fallback if filtering would isolate the node. Keep one node per spelling; do **not** skip the ~448 mixed inh+bor leaves (most are one sense listed as inherit+borrow). Separate plan: son-homograph-diagnosis.
+3. **Diamond test suite** — keep existing ETL + Go unit tests; move `tests/` → `etl/tests/`; add a few Vitest cases, Postgres integration (throwaway compose on 5433 so play data on 5432 is untouched), MSW Easy round, Playwright Easy + Hard (Hard can click-to-place, avoid HTML5 drag). Separate plan: diamond-test-suite.
+4. **Doc sync** — [frontend/README.md](frontend/README.md) still says Hard is a stub and there is no router; [etl/README.md](etl/README.md) still quotes `min_quality` 3 / `n` 50; OpenAPI should list `GET /puzzles/{id}`.
+
+Known polish, not blocking: stamp click near the animated border can miss; after `--db` the UI lock may hold a deleted id until 404/Next.
+
+## Suggested next build order
+
+1. Case-qualifier glosses + regenerate into Postgres; eyeball Easy for leftover `[with …]` answers.
+2. Gloss-aligned homograph allowlist + *son* fixture; regenerate.
+3. Diamond tests + CI.
+4. Doc sync (or do it alongside 1–3).
+5. Then, if v1 still feels solid: accounts / scores / daily — not before.

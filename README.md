@@ -15,8 +15,9 @@ etl/            Python CLI: download dumps, filter the graph, emit puzzles
 backend/        Go HTTP API + Postgres schema (picks a puzzle, grades a solve)
 frontend/       React + Vite UI (home, easy, hard)
 data/           Local artifacts (raw dumps, derived graph, puzzle JSONL) — not in git
-tests/          ETL tests
-docker-compose.yml   Postgres 16 + API
+etl/tests/      ETL pytest (offline + optional Postgres)
+docker-compose.yml        Postgres 16 + API (play stack, :5432 / :8080)
+docker-compose.test.yml   Throwaway Postgres + API for tests (:5433 / :18080)
 ```
 
 Each layer has its own README for commands, env vars, and internals:
@@ -74,3 +75,25 @@ pnpm dev
 Open the URL Vite prints (usually `http://localhost:5173`). The UI proxies `/api` to the Go service on port 8080.
 
 Postgres is on `localhost:5432` (`etymoguessr` / `etymoguessr`). To stop the containers: `docker compose down`.
+
+## Tests
+
+Each layer owns its suite. Offline tests need no Docker:
+
+```bash
+uv run pytest -m "not integration"   # ETL
+cd backend && go test ./...          # API (Postgres cases skip without TEST_DATABASE_URL)
+cd frontend && pnpm test             # Vitest unit + MSW
+```
+
+Integration and browser tests use a throwaway stack so they never truncate the play database on 5432:
+
+```bash
+docker compose -f docker-compose.test.yml up -d --wait --build
+export TEST_DATABASE_URL=postgres://etymoguessr:etymoguessr@localhost:5433/etymoguessr?sslmode=disable
+uv run pytest -m integration
+cd backend && TEST_DATABASE_URL=$TEST_DATABASE_URL go test -p 1 ./...
+cd frontend && pnpm exec playwright install chromium && pnpm test:e2e
+```
+
+Wait until `http://localhost:18080/health` is ok before the Playwright run (it loads fixtures into the test database). The e2e UI uses `VITE_API_URL=http://localhost:18080`.
