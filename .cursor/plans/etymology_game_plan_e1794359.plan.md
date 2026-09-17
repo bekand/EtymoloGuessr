@@ -1,6 +1,6 @@
 ---
 name: Etymology game plan
-overview: "EtymoGuessr v1 is playable locally: Python ETL, Go API + Postgres, React paper/ink UI (Easy MC + Hard graph editor). Remaining work is the gloss-aligned homograph allowlist."
+overview: "EtymoGuessr v1 is playable locally: Python ETL, Go API + Postgres, React paper/ink UI (Easy MC + Hard graph editor), including the gloss-aligned homograph allowlist. Next goal is Railway (Vite/Caddy SPA + Go API, JSONL in-process, no hosted Postgres)."
 todos:
   - id: etl-cli
     content: "Python Typer CLI: refresh, generate (--n, stdout/jsonl/db), reset, doctor, stats, inspect, validate, load, disable"
@@ -31,19 +31,22 @@ todos:
     status: completed
   - id: homograph-allowlist
     content: Gloss-aligned ancestor-edge allowlist from kaikki etymology_templates so mixed-etymology nodes (English son) walk the sense that matches the stored gloss
-    status: pending
+    status: completed
   - id: diamond-tests
     content: "Diamond suite: move ETL tests under etl/tests/, Vitest/Playwright, Postgres integration, CI"
     status: completed
   - id: doc-sync
     content: "Catch up frontend README (Hard + Router), etl README defaults (n=0, min_quality=4), OpenAPI GET /puzzles/{id}"
     status: completed
+  - id: cloud-deploy
+    content: "Railway: Vite/Caddy SPA + Go API, JSONL catalog at boot (no hosted Postgres); PORT, CORS, snapshot, memStore"
+    status: pending
 isProject: false
 ---
 
 # EtymoGuessr
 
-**Status:** v1 is playable locally. Python ETL writes puzzle rows, a Go API serves one at a time (hiding the answer until submit), and a React UI plays Easy and Hard. This plan is the product/architecture source of truth; layer READMEs hold commands.
+**Status:** v1 is playable locally, including the gloss-aligned homograph allowlist. Python ETL writes puzzle rows (JSONL and/or Postgres), a Go API serves one at a time (hiding the answer until submit), and a React UI plays Easy and Hard. Last full generate emitted ~3,678 quality-4 puzzles ([`data/reports/funnel.json`](data/reports/funnel.json)). Frontend is still Vite-only (not in Compose). Next goal is **cloud-deployable on Railway**. This plan is the product/architecture source of truth; layer READMEs hold commands.
 
 Wiktionary-derived data is noisy and **has no meanings**, so the pipeline joins glosses from kaikki/wiktextract and **prefers semantic-shift pairs** so multiple-choice is not trivial (EN *father* / DE *Vater* both mean “father”).
 
@@ -55,9 +58,9 @@ Wiktionary-derived data is noisy and **has no meanings**, so the pipeline joins 
 
 **Home** (`/`): Easy / Hard stamps. React Router, not in-memory screen state.
 
-**Out of scope for v1:** accounts, scoring persistence, leaderboards (`users` / `scores` tables exist so later work does not rewrite schema). Daily challenge / explore-the-full-graph can wait. No dark theme (paper metaphor). Partial credit for hard edges (precision/recall) is optional later.
+**Out of scope for v1:** accounts, scoring persistence, leaderboards (`users` / `scores` tables exist locally so later work does not rewrite schema). Daily challenge / explore-the-full-graph can wait. No dark theme (paper metaphor). Partial credit for hard edges (precision/recall) is optional later. **Hosted Postgres is not part of v1 production** (see Railway below).
 
-**License:** etymology-db is [CC BY-SA 3.0](https://github.com/droher/etymology-db). Attribute Wiktionary + etymology-db in the UI colophon; derived puzzle data stays share-alike. Do **not** commit `data/puzzles/` snapshots.
+**License:** etymology-db is [CC BY-SA 3.0](https://github.com/droher/etymology-db). Attribute Wiktionary + etymology-db in the UI colophon; derived puzzle data stays share-alike. Do **not** commit raw dumps or `data/derived/` graph artifacts. A ~5 MB production `puzzles.jsonl` snapshot may be committed or CI-baked for Railway (dumps stay gitignored).
 
 ## Why not query the live etymology graph at request time
 
@@ -69,20 +72,21 @@ flowchart LR
   raw[data/raw]
   graph[data/derived graph plus glosses]
   gen[etl generate]
-  out[stdout or JSONL]
-  pg[(Postgres puzzles)]
+  jsonl[puzzles.jsonl]
+  localPg[(Local Postgres)]
   api[Go API]
   ui[React Vite]
   refresh --> raw
   raw --> graph
   graph --> gen
-  gen --> out
-  gen --> pg
-  pg --> api
+  gen --> jsonl
+  gen --> localPg
+  localPg --> api
+  jsonl -.->|prod boot| api
   api --> ui
 ```
 
-**Local loop:** `docker compose up --build -d` (Postgres 16 + API on `:8080`), `uv run etl reset --all --reload --fixtures` for a tiny playable set, `cd frontend && pnpm dev` (Vite proxies `/api` → `:8080`). Full Wiktionary puzzles: `etl refresh` then `etl generate --db` (see [etl/README.md](etl/README.md)). Frontend is **not** in Compose.
+**Local loop:** `docker compose up --build -d` (Postgres 16 + API on `:8080`), `uv run etl reset --all --reload --fixtures` for a tiny playable set, `cd frontend && pnpm dev` (Vite proxies `/api` → `:8080`). Full Wiktionary puzzles: `etl refresh` then `etl generate --db` and/or `--jsonl` (see [etl/README.md](etl/README.md)). Frontend is **not** in Compose. Production will load JSONL in-process instead of hosted Postgres.
 
 ## Data pipeline (Python CLI) — as built
 
@@ -93,8 +97,8 @@ Source: [droher/etymology-db](https://github.com/droher/etymology-db) (`etymolog
 ### Layout
 
 - `data/raw/` — parquet, gloss JSONL, checksums, `manifest.json`, `NOTICE`
-- `data/derived/` — filtered edges parquet, `gloss_index.json`, `lemma_index.json`
-- `data/puzzles/` — optional JSONL snapshots (not in git)
+- `data/derived/` — filtered edges parquet, `gloss_index.json`, `lemma_index.json`, `etym_parents.json`
+- `data/puzzles/` — optional JSONL snapshots (not in git today; a production snapshot is part of cloud-deploy)
 - `data/reports/` — `funnel.json`, `stats.json`
 - `etl/fixtures/` — tiny committed slice for tests and `--fixtures`
 
@@ -108,8 +112,8 @@ Source: [droher/etymology-db](https://github.com/droher/etymology-db) (`etymolog
 
 ### Stages
 
-1. **Reduce graph** — leaf langs English / Spanish / Portuguese / German; ancestor allowlist in config (Latin through PIE, plus Ancient Greek, Arabic, Hebrew, Persian, Nahuatl, Sanskrit, …); keep `inherited_from`, `borrowed_from`, `derived_from`, `root`, `cognate_of`, `doublet_with`; drop null related terms, MWEs, affix noise.
-2. **Index glosses** — first *lexical* gloss per `(lang, term)`; skip `form_of` / grammatical-form senses; strip leading case-government labels (`[with genitive]`, `[of place]`); join colon-ending qualifier lists onto the continuation (`Of a person:` + `smug` → one gloss). Qualifier-only senses are skipped. Form-only entries inherit the citation lemma’s gloss and are recorded in `lemma_index.json`.
+1. **Reduce graph** — leaf langs English / Spanish / Portuguese / German; ancestor allowlist in config (Latin through PIE, plus Ancient Greek, Arabic, Hebrew, Persian, Nahuatl, Sanskrit, …); keep `inherited_from`, `borrowed_from`, `derived_from`, `root`, `cognate_of`, `doublet_with`; drop null related terms, MWEs, affix noise. Then **align ancestor edges** to the winning-gloss parent list (`etym_parents.json`): drop dump ancestor edges whose `related_term` is not in that list; fallback if filtering would isolate the node; never filter non-ancestor reltypes (`cognate_of`, `doublet_with`).
+2. **Index glosses** — first *lexical* gloss per `(lang, term)`; skip `form_of` / grammatical-form senses; strip leading case-government labels (`[with genitive]`, `[of place]`); join colon-ending qualifier lists onto the continuation (`Of a person:` + `smug` → one gloss). Qualifier-only senses are skipped. Form-only entries inherit the citation lemma’s gloss and are recorded in `lemma_index.json`. Parent terms come from the same kaikki object as the stored gloss (`inh` / `bor` / `der` / `root` templates, arg `3`); form-only keys do not copy the lemma’s parent list.
 3. **Extract puzzles** — two modern leaves and their closest connecting subgraph / LCA. Ancestor walks use `inherited_from` / `borrowed_from` / `derived_from` / `root` only.
 4. **Ids** — SHA-256 of `(leaf_a, leaf_b, lca, gold edges)` so `etl load` upserts instead of duplicating. `--seed` for sampling and choice shuffle.
 
@@ -142,23 +146,23 @@ Start at 5:
 - `etl reset` — never `DROP DATABASE` or drop `users` / `scores` tables. `--puzzles` truncates puzzle + score rows. `--reload` force-refreshes, generates, writes JSONL, and `--db`.
 - Also: `doctor`, `stats`, `inspect`, `validate`, `disable`. Go owns schema migrations; ETL assumes `puzzles` exists (`etl doctor` checks). A missing DB does not fail doctor (JSONL-only is valid).
 
-`generate --n > 0` early-exits once enough survivors exist. `--n 0` is the full pass. The API has **no puzzle cache**; after `--db`, the next `GET /puzzles/random` sees new rows. The UI may still show a locked id until 404 / Next.
+`generate --n > 0` early-exits once enough survivors exist. `--n 0` is the full pass. The local API has **no puzzle cache**; after `--db`, the next `GET /puzzles/random` sees new rows. The UI may still show a locked id until 404 / Next. Production catalog updates are a new JSONL + API redeploy (no live `etl disable` against Railway).
 
-## Database (Postgres)
+## Database (Postgres) — local ETL / play stack
 
-Pregenerated puzzles only — not the 4M-edge dump.
+Pregenerated puzzles only — not the 4M-edge dump. **Local Compose and `generate --db` / `load` / `disable` still use Postgres.** Production v1 does not.
 
 - `puzzles`: `id` (content hash), `enabled` (default true), `leaf_a` / `leaf_b`, `answer_graph` (gold; prompt derived at serve time), `choices`, `correct_choice`, `quality_score`, `lang_pair`, `source`.
 - **Canonical gold is `answer_graph` only.** No `prompt_graph` column or JSONL field. Load rejects payloads that still include `prompt_graph`.
-- Empty `users` / `scores` for later auth/leaderboards. ETL must never drop those tables.
+- Empty `users` / `scores` for later auth/leaderboards. ETL must never drop those tables. When accounts/scores ship, a real DB (Neon or similar) returns; that is not this milestone.
 
 ## Backend: Go — as built
 
-Thin JSON over pregenerated rows. Python stays **only** for ETL. Stack: Go 1.24+ `net/http`, `pgx`, embedded SQL migrations (`AUTO_MIGRATE=true` on boot). Single binary in Docker. CORS for Vite.
+Thin JSON over pregenerated rows. Python stays **only** for ETL. Stack: Go 1.24+ `net/http`, `pgx`, embedded SQL migrations (`AUTO_MIGRATE=true` on boot). Single distroless binary in [backend/Dockerfile](backend/Dockerfile). CORS for Vite. HTTP tests already use an in-memory `memStore`; production will promote that path and load JSONL at boot.
 
 ### Endpoints
 
-- `GET /health` — ping Postgres.
+- `GET /health` — today pings Postgres. File-store prod: process-up (no `Ping`).
 - `GET /puzzles/random?mode=easy|hard` — only `enabled = true`. Query: `langPair`, `minQuality`. Hard also requires **≥ 4 nodes**. `404` if none match.
 - `GET /puzzles/{id}?mode=` — used by the UI puzzle lock to re-fetch after refresh; 404 clears the lock if `--db` deleted the row.
 - `POST /puzzles/{id}/solve` — `{ mode, choiceId }` or `{ mode, edges }`; returns `{ correct, goldGraph, choices, correctChoice }`.
@@ -167,7 +171,7 @@ Thin JSON over pregenerated rows. Python stays **only** for ETL. Stack: Go 1.24+
 
 Graph check: canonicalize node ids, compare directed edge sets (ignore layout and `reltype`).
 
-OpenAPI: [backend/openapi.yaml](backend/openapi.yaml). Tests: in-memory store + `internal/puzzle` unit tests; Postgres store/API cases skip unless `TEST_DATABASE_URL` is set (`go test ./...`).
+OpenAPI: [backend/openapi.yaml](backend/openapi.yaml). Tests: in-memory store + `internal/puzzle` unit tests; Postgres store/API cases skip unless `TEST_DATABASE_URL` is set (`go test ./...`). Listen address today is `HTTP_ADDR` (default `:8080`); Railway injects `PORT`.
 
 ## Frontend: React + TypeScript + Vite — as built
 
@@ -178,6 +182,7 @@ OpenAPI: [backend/openapi.yaml](backend/openapi.yaml). Tests: in-memory store + 
 - Puzzle lock in `localStorage` so refresh does not swap the round. Choice order and post-it colors shuffle from the puzzle id.
 - Responsive breakpoints: mobile / tablet / desktop (`_breakpoints.scss`).
 - Tests: Vitest units + MSW Easy round (`pnpm test`); Playwright Easy + Hard click-to-place (`pnpm test:e2e` against the test compose stack).
+- Dev client: `VITE_API_URL` or Vite `/api` proxy ([`frontend/src/api/client.ts`](frontend/src/api/client.ts)). Production SPA needs `VITE_API_URL` at build and Caddy `try_files` for `/easy` `/hard`.
 
 ### Design system (paper, ink, typewriter)
 
@@ -194,13 +199,13 @@ Unchanged intent. Cream desk, graphite ink, low-sat post-its, stamp-red used spa
 
 ## Quality risks (still true)
 
-- **Noise:** Wiktionary parse errors → filters, `quality_score`, `etl disable`.
+- **Noise:** Wiktionary parse errors → filters, `quality_score`, `etl disable` (local). Production catalog is a snapshot: disable = regenerate JSONL and redeploy.
 - **Too-easy MC:** divergence / identity filters + real LCA-gloss distractors.
 - **ES/PT overlap:** 3-character prefix −2, plus identity filters; mix with EN/DE via quality sort.
 - **Reconstructed forms:** keep `*` on terms; gloss from proto entries when present.
 - **Hard-mode UX:** do not ask players to guess relation types or invent nodes.
-- **Homographs:** one node id per `(lang, term)` collapses senses (English *son* = offspring gloss + Spanish-music edge). Fix planned below; do not skip all mixed leaves.
-- **Case-government glosses:** done. `first_gloss` strips `[with genitive]` / `[of place]` / similar; leftover qualifier-only LCA glosses → `inflection_lca`. Regen (`etl refresh` then `generate --db`) if an old puzzle row still shows a `[with …]` answer.
+- **Homographs:** one node id per `(lang, term)` still collapses spellings. The shipped fix is the winning-gloss ancestor allowlist (not skipping mixed leaves). English *son* walks Old English *sunu*, not Spanish *son*. Fallback keeps dump edges if the allowlist would isolate the node.
+- **Case-government glosses:** done. `first_gloss` strips `[with genitive]` / `[of place]` / similar; leftover qualifier-only LCA glosses → `inflection_lca`. Regen (`etl refresh` then `generate --db` / JSONL) if an old puzzle row still shows a `[with …]` answer.
 
 ## Decisions that diverged from the original plan
 
@@ -217,23 +222,66 @@ These are settled. Do not silently revert them.
 | ES–PT quality | Always penalize | **−2 only if first 3 chars of leaf terms match.** |
 | Same-meaning | Gloss Jaccard | Leaf **term token** in LCA gloss; identity via **first content word**. |
 | Form-only LCA | Skip / `no_gloss` | **Rewrite node to citation lemma**; keep lexical homographs. |
+| Homographs | Skip mixed leaves or split nodes | **Keep one node per spelling**; gloss-aligned `inh`/`bor`/`der`/`root` allowlist + isolate fallback. |
 | Navigation | React state screens | **React Router** `/` `/easy` `/hard`. |
 | Compose frontend | Optional in compose | **Local Vite only.** |
 | Distractors | Plausible LCAs | **No placeholders.** |
 | `n` default | Sample size | **0 = all survivors.** |
 | OpenAPI | Optional | Shipped, including `GET /puzzles/{id}`. |
+| Production store | Hosted Postgres | **JSONL loaded in-process** (~5 MB / ~3.7k rows). Local Postgres stays for ETL. No Redis / SQLite-memory. |
+| Production host | Unspecified | **Railway** (SPA + API). See comparison below. |
 
 Backend language (Go, not Python/Elixir/Spring) is unchanged. Alternatives considered in the original plan still stand if this is ever revisited.
 
+## Next goal: Railway (JSONL in-process)
+
+**ETL stays off the cloud.** Pregenerate locally to JSONL. Production loads that file into the Go process (`go:embed` or `PUZZLES_PATH`). Do not add Redis, SQLite `:memory:`, or another in-memory database product — promote the test `memStore`. Parsed RAM is tens of MB on a 512 MB box.
+
+`users` / `scores` stay unused. `etl disable` / `generate --db` / `load` stay local. Gold is already in JSONL; GET still strips it. Shipping the file in the image is the same secret-model as shipping the table.
+
+```mermaid
+flowchart LR
+  player[Browser]
+  spa[RailwayCaddy]
+  api[RailwayGo]
+  catalog[JSONL in process]
+  etl[Local ETL]
+  jsonl[puzzles.jsonl]
+  localPg[(Local Postgres optional)]
+  player --> spa
+  spa --> api
+  api --> catalog
+  etl --> jsonl
+  jsonl -->|embed or PUZZLES_PATH| catalog
+  etl -.-> localPg
+```
+
+**Locked shape:** one Railway project, two services, no database service.
+
+- **web:** [`frontend/`](frontend/) — Node build, Caddy serves `dist`, SPA `try_files` for `/easy` `/hard`. `VITE_API_URL` = public API URL.
+- **api:** [`backend/`](backend/) — existing Dockerfile + JSONL snapshot. Honor `PORT` (Railway injects it). `CORS_ORIGINS` = public web URL. `DATABASE_URL` unset. `/health` is process-up.
+
+Do not add Railway Postgres. Do not run ETL on Railway. Catalog updates = regenerate JSONL locally, redeploy API. Enable Serverless on both services so they sleep (safe because there is no `pgx` pool in prod). Free plan: $0 subscription + **$1/month usage credit**, 1 project, 3 services, 0.5 GB RAM each, **no custom domain** (`*.up.railway.app`). Hobby ($5) only if a custom domain is needed later. Same-origin Caddy reverse-proxy to the API is a later nicety, not required.
+
+**Pros of dropping hosted Postgres for v1:** no always-on DB (the thing that blows the $1 credit); both services can sleep; catalog is versioned with the deploy; no prod `DATABASE_URL` / migrations / `sslmode`. **Cons:** catalog changes require a redeploy; need a committed or CI-built ~5 MB snapshot; local Compose Postgres remains a second store until scores exist; `/health` must not require Postgres when the file store is active.
+
+### Free-tier hosts considered, not chosen
+
+- **Cloudflare Pages + Cloud Run** — true $0 and easy custom domain; two vendors. Rejected in favor of one dashboard.
+- **Render free web** — sleeps; extra vendor vs Railway. (Render’s free Postgres expires at 30 days — irrelevant after the JSONL lock.)
+- **Fly.io / Koyeb** — no useful free tier for new accounts.
+- **Oracle Always Free VM** — always-on $0, more ops than Railway for this app.
+- **Hosted Postgres (Neon, Supabase, …)** — out for v1 after the JSONL lock. Returns when `users` / `scores` ship.
+
 ## Remaining work
 
-**Homograph allowlist** — parse kaikki `inh`/`bor`/`der`/`root` templates with the winning gloss; drop dump ancestor edges whose `related_term` is not in that list; fallback if filtering would isolate the node. Keep one node per spelling; do **not** skip the ~448 mixed inh+bor leaves (most are one sense listed as inherit+borrow). Separate plan: son-homograph-diagnosis.
+**Cloud deploy on Railway** — `PORT` fallback, file-store `memStore` + JSONL snapshot, frontend Dockerfile/Caddyfile, `VITE_API_URL` / `CORS_ORIGINS`, Serverless, README deploy steps. Code is the follow-up to this plan.
 
-Shipped since the last remaining-work list: case-qualifier stripping in `first_gloss` plus `inflection_lca` for leftover qualifier-only LCAs; ETL tests live under `etl/tests/`; Vitest + MSW Easy round; Playwright Easy/Hard (click-to-place); throwaway compose on 5433; CI.
+Shipped since earlier remaining-work lists: gloss-aligned homograph allowlist (`etymology_parent_terms` / `_align_ancestor_edges` / `etym_parents.json`, *son* unit tests + fixture CLI check that no `English:son` → `Spanish:son` gold edge is emitted); case-qualifier stripping in `first_gloss` plus `inflection_lca`; ETL tests under `etl/tests/`; Vitest + MSW Easy round; Playwright Easy/Hard (click-to-place); throwaway compose on 5433; CI.
 
 Known polish, not blocking: stamp click near the animated border can miss; after `--db` the UI lock may hold a deleted id until 404/Next.
 
 ## Suggested next build order
 
-1. Gloss-aligned homograph allowlist + *son* fixture; regenerate.
-2. Then, if v1 still feels solid: accounts / scores / daily — not before.
+1. Railway-ready API (JSONL at boot, `PORT`, health without Postgres) + Vite/Caddy frontend service + catalog snapshot.
+2. Then, if v1 still feels solid on a public URL: accounts / scores / daily — not before (that is when a real DB returns).
