@@ -17,16 +17,16 @@ from etl.generate import (
     Funnel,
     build_graph,
     extract_candidates,
-    gloss_overlap,
     involves_english,
     is_proper_noun_leaf,
     leaf_reuse_key,
-    leaf_shares_lca_label,
     make_choices,
+    meaning_overlap,
     normalize_label,
+    prefer_latin_chain_path,
     prepare_score_buckets,
     quality_score,
-    still_same_meaning,
+    shares_meaning,
 )
 from etl.ids import puzzle_id
 from etl.validate import validate_puzzles
@@ -204,6 +204,10 @@ def test_index_glosses_inherits_form_only_lemma():
     assert gloss_for(stale, "English", "acromegalia") == "abnormal growth of the extremities"
     assert gloss_for(stale, "English", "missing") is None
     assert gloss_for({"English\tstub": "alternative form of nowhere"}, "English", "stub") is None
+    # Late/Medieval Latin nodes reuse Classical Latin kaikki glosses; macrons fold.
+    assert gloss_for({"Latin\thaeresis": "sect"}, "Medieval Latin", "haeresis") == "sect"
+    assert gloss_for({"Latin\tmuseum": "temple of the Muses"}, "Latin", "mūsēum") == "temple of the Muses"
+    assert gloss_for({"Latin\toeconomus": "steward"}, "Late Latin", "oeconomus") == "steward"
 
 
 def test_index_glosses_keeps_lexical_homograph_not_lemma():
@@ -336,6 +340,54 @@ def test_reduce_edges_drops_unaligned_borrow_keeps_cognate():
     assert ("cognate_of", "Sohn", "German") in pairs
 
 
+def test_reduce_edges_keeps_latin_intermediate_on_path_to_allowlisted_greek():
+    """Templates naming only Greek must not drop a dump Latin hop that reaches Greek."""
+    cfg = {
+        **_reduce_cfg(),
+        "ancestor_languages": ["Latin", "Ancient Greek", "Old English", "Proto-Germanic"],
+    }
+    df = pd.DataFrame(
+        [
+            dict(term="historia", lang="Spanish", reltype="borrowed_from", related_term="historia", related_lang="Latin"),
+            dict(term="historia", lang="Spanish", reltype="derived_from", related_term="ἱστορία", related_lang="Ancient Greek"),
+            dict(term="historia", lang="Latin", reltype="derived_from", related_term="ἱστορία", related_lang="Ancient Greek"),
+            # Homograph noise: must still drop when not on a path to the allowlist.
+            dict(term="son", lang="English", reltype="inherited_from", related_term="sunu", related_lang="Old English"),
+            dict(term="son", lang="English", reltype="borrowed_from", related_term="son", related_lang="Spanish"),
+        ]
+    )
+    out = reduce_edges(
+        df,
+        cfg,
+        parents={
+            "Spanish\thistoria": ["ἱστορία"],
+            "English\tson": ["sunu", "*sunuz"],
+        },
+    )
+    pairs = set(zip(out["lang"], out["reltype"], out["related_term"], out["related_lang"]))
+    assert ("Spanish", "borrowed_from", "historia", "Latin") in pairs
+    assert ("Spanish", "derived_from", "ἱστορία", "Ancient Greek") in pairs
+    assert ("English", "inherited_from", "sunu", "Old English") in pairs
+    assert ("English", "borrowed_from", "son", "Spanish") not in pairs
+
+
+def test_reduce_edges_macron_fold_matches_allowlist():
+    cfg = {
+        **_reduce_cfg(),
+        "ancestor_languages": ["Latin", "Ancient Greek"],
+    }
+    df = pd.DataFrame(
+        [
+            dict(term="pulpo", lang="Spanish", reltype="inherited_from", related_term="polypūs", related_lang="Latin"),
+            dict(term="pulpo", lang="Spanish", reltype="derived_from", related_term="πολύπους", related_lang="Ancient Greek"),
+        ]
+    )
+    out = reduce_edges(df, cfg, parents={"Spanish\tpulpo": ["polypus", "πολύπους"]})
+    pairs = set(zip(out["reltype"], out["related_term"], out["related_lang"]))
+    assert ("inherited_from", "polypūs", "Latin") in pairs
+    assert ("derived_from", "πολύπους", "Ancient Greek") in pairs
+
+
 def test_reduce_edges_falls_back_when_allowlist_matches_nothing():
     df = pd.DataFrame(
         [
@@ -397,6 +449,54 @@ def test_extract_candidates_son_does_not_walk_spanish_borrow():
     assert mixed == []
 
 
+def test_extract_candidates_routes_parallel_der_through_late_latin():
+    """BFS leaf→Greek shortcut becomes leaf→Late Latin→Greek when both edges exist."""
+    rows = [
+        dict(term="Ökonom", lang="German", reltype="derived_from", related_term="oeconomus", related_lang="Late Latin"),
+        dict(term="Ökonom", lang="German", reltype="derived_from", related_term="οἰκονόμος", related_lang="Ancient Greek"),
+        dict(
+            term="económico",
+            lang="Portuguese",
+            reltype="derived_from",
+            related_term="oeconomicus",
+            related_lang="Latin",
+        ),
+        dict(
+            term="oeconomicus",
+            lang="Latin",
+            reltype="derived_from",
+            related_term="οἰκονόμος",
+            related_lang="Ancient Greek",
+        ),
+    ]
+    df = pd.DataFrame(rows)
+    glosses = {
+        "German\tÖkonom": "economist",
+        "Portuguese\teconómico": "economic",
+        "Late Latin\toeconomus": "steward of a household",
+        "Latin\toeconomicus": "of household management",
+        "Ancient Greek\tοἰκονόμος": "one who manages a household",
+    }
+    g = build_graph(df, {"inherited_from", "borrowed_from", "derived_from", "root"})
+    cfg = {
+        "leaf_languages": {"English": "en", "Spanish": "es", "Portuguese": "pt", "German": "de"},
+        "ancestor_reltypes": ["inherited_from", "borrowed_from", "derived_from", "root"],
+        "generate": {"max_nodes": 9, "max_gloss_overlap": 0.5},
+    }
+    funnel = Funnel()
+    cands = extract_candidates(g, glosses, cfg, funnel)
+    assert len(cands) == 1
+    gold = {(e.source, e.target) for e in cands[0]["edges"]}
+    assert ("German:Ökonom", "Late Latin:oeconomus") in gold
+    assert ("Late Latin:oeconomus", "Ancient Greek:οἰκονόμος") in gold
+    assert ("German:Ökonom", "Ancient Greek:οἰκονόμος") not in gold
+    assert ("Portuguese:económico", "Latin:oeconomicus") in gold
+    assert cands[0]["lca"]["term"] == "οἰκονόμος"
+    # Direct unit check: prefer_latin_chain_path invents Latin→LCA when missing.
+    path = prefer_latin_chain_path(g, ["German:Ökonom", "Ancient Greek:οἰκονόμος"], "Ancient Greek:οἰκονόμος")
+    assert path == ["German:Ökonom", "Late Latin:oeconomus", "Ancient Greek:οἰκονόμος"]
+
+
 def test_first_gloss_empty_or_missing_senses():
     assert first_gloss({}) is None
     assert first_gloss({"senses": []}) is None
@@ -424,24 +524,23 @@ def test_proper_noun_leaf_filter():
     assert leaf_reuse_key("English", "gift") == "English\tgift"
 
 
-def test_gloss_overlap_and_still_same_meaning():
-    assert gloss_overlap("a dog used for hunting", "a dog") > 0.2
-    assert gloss_overlap("a present given to someone", "poison; a toxic substance") < 0.2
-    assert still_same_meaning("dog", "a dog used for hunting")
-    assert still_same_meaning("Gift", "a gift; something given")
-    assert not still_same_meaning("gift", "poison; a toxic substance")
-    assert not still_same_meaning("the", "the ancestor sense")
-
-
-def test_leaf_shares_lca_label():
+def test_meaning_overlap_helpers():
     assert normalize_label("*Gift") == "gift"
-    assert leaf_shares_lca_label("gift", "present", "gift", "something given")
-    assert leaf_shares_lca_label("Gift", "present", "*gift", "something given")
-    assert leaf_shares_lca_label("poison", "a toxic substance", "*giftiz", "a toxic substance")
-    assert leaf_shares_lca_label("hound", "dog", "*hundaz", "hound")
-    assert leaf_shares_lca_label("dragon", "a large serpent", "*drakō", "dragon, monster")
-    assert leaf_shares_lca_label("dragon", "a large serpent", "*drakō", "a dragon or monster")
-    assert not leaf_shares_lca_label("gift", "present", "*giftiz", "poison")
+    assert meaning_overlap("a dog used for hunting", "a dog") > 0.2
+    assert meaning_overlap("a present given to someone", "poison; a toxic substance") < 0.2
+    assert shares_meaning("dog", "a dog used for hunting")
+    assert shares_meaning("Gift", "a gift; something given")
+    assert not shares_meaning("gift", "poison; a toxic substance")
+    assert not shares_meaning("the", "the ancestor sense")
+    # Headword identity (lca_equals_leaf): first content word of term/gloss.
+    assert shares_meaning("gift", "gift", head_only=True)
+    assert shares_meaning("Gift", "*gift", head_only=True)
+    assert shares_meaning("a toxic substance", "a toxic substance", head_only=True)
+    assert shares_meaning("hound", "hound", head_only=True)
+    assert shares_meaning("dragon", "dragon, monster", head_only=True)
+    assert shares_meaning("dragon", "a dragon or monster", head_only=True)
+    assert not shares_meaning("gift", "poison", head_only=True)
+    assert not shares_meaning("present", "something given", head_only=True)
 
 
 def test_puzzle_id_order_invariant():

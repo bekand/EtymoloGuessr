@@ -49,6 +49,12 @@ MIN_TOKEN_LENGTH = 2
 # capitalizes all nouns). Applied only to modern leaf languages in this set.
 _PROPER_NOUN_CASE_LANGS = frozenset({"English", "Spanish", "Portuguese"})
 
+# Latin-family ancestors used when reconstructing leaf → Latin → LCA gold paths
+# for Wiktionary parallel ``der`` stars (e.g. German Ökonom).
+_LATIN_FAMILY_LANGS = frozenset(
+    {"Latin", "Late Latin", "Medieval Latin", "Vulgar Latin", "Old Latin"}
+)
+
 
 def is_proper_noun_leaf(lang: str, term: str) -> bool:
     """True when a leaf term looks like a proper noun (initial uppercase letter).
@@ -88,27 +94,6 @@ def _iter_content_tokens(text: str):
             yield w
 
 
-def tokenize(text: str | None) -> set[str]:
-    if not text:
-        return set()
-    return set(_iter_content_tokens(text.lower()))
-
-
-def gloss_overlap(a: str | None, b: str | None) -> float:
-    ta, tb = tokenize(a), tokenize(b)
-    if not ta or not tb:
-        return 0.0
-    return len(ta & tb) / len(ta | tb)
-
-
-def still_same_meaning(leaf_term: str | None, gloss: str | None) -> bool:
-    """True when a content word from the leaf term still appears in the gloss."""
-    term_tok = tokenize(leaf_term)
-    if not term_tok:
-        return False
-    return bool(term_tok & tokenize(gloss))
-
-
 def normalize_label(text: str | None) -> str:
     """Casefold a term or gloss for identity checks; strip a reconstruction *."""
     if not text:
@@ -119,27 +104,63 @@ def normalize_label(text: str | None) -> str:
     return s
 
 
-def first_content_word(text: str | None) -> str:
-    """First non-function token after normalize_label, or empty."""
+def content_tokens(text: str | None, *, head_only: bool = False) -> set[str]:
+    """Content tokens after normalize_label; optionally only the first token."""
+    tokens = set()
     for word in _iter_content_tokens(normalize_label(text)):
-        return word
-    return ""
+        tokens.add(word)
+        if head_only:
+            break
+    return tokens
 
 
-def leaf_shares_lca_label(
-    leaf_term: str | None,
-    leaf_gloss: str | None,
+def meaning_overlap(a: str | None, b: str | None, *, head_only: bool = False) -> float:
+    """Jaccard of content tokens (singletons when head_only). Empty side -> 0.0."""
+    ta, tb = content_tokens(a, head_only=head_only), content_tokens(b, head_only=head_only)
+    if not ta or not tb:
+        return 0.0
+    return len(ta & tb) / len(ta | tb)
+
+
+def shares_meaning(a: str | None, b: str | None, *, head_only: bool = False) -> bool:
+    """True when two labels share any content token (first token only if head_only)."""
+    return meaning_overlap(a, b, head_only=head_only) > 0
+
+
+def pair_meaning(
+    term_a: str | None,
+    gloss_a: str | None,
+    term_b: str | None,
+    gloss_b: str | None,
     lca_term: str | None,
     lca_gloss: str | None,
-) -> bool:
-    """True when a leaf and the LCA share a first content word (term or gloss).
+    max_overlap: float,
+) -> tuple[str | None, bool]:
+    """Reject reason and high-overlap flag for a leaf pair vs its LCA.
 
-    Catches identical labels and head-word matches like leaf ``dragon`` vs LCA
-    gloss ``dragon, monster``.
+    Returns ``(reject_reason, high_overlap)``. ``reject_reason`` is
+    ``lca_equals_leaf`` (headword leak), ``same_meaning`` (both terms still in
+    the LCA gloss, or leaf-gloss Jaccard >= max_overlap), or ``None`` to keep.
+    ``high_overlap`` is True when either leaf term still appears in the LCA gloss
+    (quality penalty); False when rejected.
     """
-    leaf_labels = {first_content_word(leaf_term), first_content_word(leaf_gloss)} - {""}
-    lca_labels = {first_content_word(lca_term), first_content_word(lca_gloss)} - {""}
-    return bool(leaf_labels & lca_labels)
+    for leaf_term, leaf_gloss in ((term_a, gloss_a), (term_b, gloss_b)):
+        leaf_heads = content_tokens(leaf_term, head_only=True) | content_tokens(
+            leaf_gloss, head_only=True
+        )
+        lca_heads = content_tokens(lca_term, head_only=True) | content_tokens(
+            lca_gloss, head_only=True
+        )
+        if leaf_heads & lca_heads:
+            return "lca_equals_leaf", False
+
+    a_in_lca = shares_meaning(term_a, lca_gloss)
+    b_in_lca = shares_meaning(term_b, lca_gloss)
+    if a_in_lca and b_in_lca:
+        return "same_meaning", False
+    if meaning_overlap(gloss_a, gloss_b) >= max_overlap:
+        return "same_meaning", False
+    return None, a_in_lca or b_in_lca
 
 
 def lang_pair_code(lang_a: str, lang_b: str, leaf_codes: dict[str, str]) -> str:
@@ -184,6 +205,52 @@ def subgraph_from_paths(path_a: list[str], path_b: list[str]) -> list[str]:
         if n not in seen:
             seen.append(n)
     return seen
+
+
+def _latin_family_neighbors(g: nx.DiGraph, leaf_id: str) -> list[str]:
+    """Direct Latin-family out-neighbors of ``leaf_id``, sorted for stability."""
+    out: list[str] = []
+    for _, succ in g.out_edges(leaf_id):
+        if g.nodes[succ].get("lang") in _LATIN_FAMILY_LANGS:
+            out.append(succ)
+    out.sort()
+    return out
+
+
+def prefer_latin_chain_path(
+    g: nx.DiGraph,
+    path: list[str],
+    lca_id: str,
+) -> list[str]:
+    """Rewrite leaf→LCA into leaf→Latin→LCA when a parallel Latin hop exists.
+
+    etymology-db often encodes ``from Late Latin X, from Greek Y`` as two edges
+    from the modern leaf. BFS then picks the direct Greek hop. Prefer routing
+    through a Latin-family sibling and add ``Latin → LCA`` when missing.
+
+    Skip when the LCA is already Latin-family (form-lemma rewrites, Latin LCAs).
+    """
+    if len(path) != 2 or path[0] == lca_id or path[-1] != lca_id:
+        return path
+    if g.nodes[lca_id].get("lang") in _LATIN_FAMILY_LANGS:
+        return path
+    leaf_id = path[0]
+    latin_neighbors = _latin_family_neighbors(g, leaf_id)
+    if not latin_neighbors:
+        return path
+    # Prefer a Latin node that already points at the LCA; else first sorted.
+    chosen_latin = None
+    for nid in latin_neighbors:
+        if g.has_edge(nid, lca_id):
+            chosen_latin = nid
+            break
+    if chosen_latin is None:
+        chosen_latin = latin_neighbors[0]
+    if not g.has_edge(chosen_latin, lca_id):
+        # Reconstruct the usual Wiktionary chain without inventing a new etymon.
+        leaf_rel = g.edges[leaf_id, lca_id].get("reltype") if g.has_edge(leaf_id, lca_id) else "derived_from"
+        g.add_edge(chosen_latin, lca_id, reltype=leaf_rel)
+    return [leaf_id, chosen_latin, lca_id]
 
 
 def _rewrite_form_lca(
@@ -468,6 +535,12 @@ def extract_candidates(
             )
             lca_lang = g.nodes[chosen]["lang"]
             lca_term = g.nodes[chosen]["term"]
+        path_a = prefer_latin_chain_path(g, path_a, chosen)
+        path_b = prefer_latin_chain_path(g, path_b, chosen)
+        node_list = subgraph_from_paths(path_a, path_b)
+        if len(node_list) > max_nodes:
+            funnel.bump("too_big")
+            continue
         if not lca_term or len(lca_term) < 3:
             funnel.bump("lca_term_too_short")
             continue
@@ -479,20 +552,12 @@ def extract_candidates(
             funnel.bump("inflection_lca")
             continue
 
-        if leaf_shares_lca_label(term_a, gloss_a, lca_term, lca_gloss) or leaf_shares_lca_label(
-            term_b, gloss_b, lca_term, lca_gloss
-        ):
-            funnel.bump("lca_equals_leaf")
+        reject, high_overlap = pair_meaning(
+            term_a, gloss_a, term_b, gloss_b, lca_term, lca_gloss, max_overlap
+        )
+        if reject:
+            funnel.bump(reject)
             continue
-
-        if still_same_meaning(term_a, lca_gloss) and still_same_meaning(term_b, lca_gloss):
-            funnel.bump("same_meaning")
-            continue
-        if gloss_overlap(gloss_a, gloss_b) >= max_overlap:
-            funnel.bump("same_meaning")
-            continue
-
-        high_overlap = still_same_meaning(term_a, lca_gloss) or still_same_meaning(term_b, lca_gloss)
 
         key = tuple(sorted([leaf_a_id, leaf_b_id]) + [chosen])
         if key in seen_pairs:

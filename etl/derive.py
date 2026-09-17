@@ -4,6 +4,7 @@ import json
 import logging
 import re
 import unicodedata
+from collections import defaultdict, deque
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -133,12 +134,61 @@ def etymology_parent_terms(obj: dict[str, Any]) -> list[str]:
     return terms
 
 
+def _folded_term_set(terms: Iterable[str]) -> set[str]:
+    return {_fold_macrons(str(t)) for t in terms if t}
+
+
+def _build_ancestor_successors(
+    anc: pd.DataFrame,
+) -> dict[tuple[str, str], list[tuple[str, str]]]:
+    """Map (lang, term) → out-neighbors under ancestor edges."""
+    succ: dict[tuple[str, str], list[tuple[str, str]]] = defaultdict(list)
+    seen: set[tuple[str, str, str, str]] = set()
+    for row in anc.itertuples(index=False):
+        src = (str(row.lang), str(row.term))
+        dst = (str(row.related_lang), str(row.related_term))
+        key = (*src, *dst)
+        if key in seen:
+            continue
+        seen.add(key)
+        succ[src].append(dst)
+    return succ
+
+
+def _reaches_allowlisted(
+    start_lang: str,
+    start_term: str,
+    allow_folded: set[str],
+    successors: dict[tuple[str, str], list[tuple[str, str]]],
+) -> bool:
+    """True when ``start`` or a dump-ancestor descendant has an allowlisted term (macron-folded)."""
+    if _fold_macrons(start_term) in allow_folded:
+        return True
+    start = (start_lang, start_term)
+    seen: set[tuple[str, str]] = {start}
+    q: deque[tuple[str, str]] = deque([start])
+    while q:
+        node = q.popleft()
+        for nxt in successors.get(node, ()):
+            if nxt in seen:
+                continue
+            if _fold_macrons(nxt[1]) in allow_folded:
+                return True
+            seen.add(nxt)
+            q.append(nxt)
+    return False
+
+
 def _align_ancestor_edges(
     df: pd.DataFrame,
     parents: dict[str, list[str]] | None,
     ancestor_reltypes: set[str],
 ) -> tuple[pd.DataFrame, int, int]:
-    """Drop ancestor edges whose related_term is not in the winning-gloss allowlist.
+    """Drop ancestor edges outside the winning-gloss etymon family.
+
+    Keep an edge when its ``related_term`` matches the allowlist (macron-folded)
+    or when a dump-ancestor walk from that related node reaches an allowlisted
+    parent (so Latin intermediates stay when templates only name Greek).
 
     If filtering would remove every ancestor edge for a source term, keep the
     original ancestor edges for that term (template/dump spelling miss).
@@ -157,16 +207,25 @@ def _align_ancestor_edges(
     dropped = 0
     fallback = 0
     anc = df.loc[is_anc]
+    successors = _build_ancestor_successors(anc)
     grouped = anc.groupby(keys.loc[is_anc], sort=False)
     for key, grp in grouped:
         terms = allow.get(str(key))
         if not terms:
             keep_idx.extend(grp.index)
             continue
-        hit = grp[grp["related_term"].isin(terms)]
-        if len(hit):
-            dropped += len(grp) - len(hit)
-            keep_idx.extend(hit.index)
+        allow_folded = _folded_term_set(terms)
+        keep_rows: list[Any] = []
+        for idx, row in grp.iterrows():
+            related_term = str(row["related_term"])
+            related_lang = str(row["related_lang"])
+            if _fold_macrons(related_term) in allow_folded or _reaches_allowlisted(
+                related_lang, related_term, allow_folded, successors
+            ):
+                keep_rows.append(idx)
+        if keep_rows:
+            dropped += len(grp) - len(keep_rows)
+            keep_idx.extend(keep_rows)
         else:
             fallback += 1
             keep_idx.extend(grp.index)
@@ -587,9 +646,29 @@ def index_glosses(
     return index, lemmas, parents
 
 
+_LATIN_FAMILY_GLOSS_LANGS = frozenset(
+    {"Latin", "Late Latin", "Medieval Latin", "Vulgar Latin", "Old Latin"}
+)
+
+
 def gloss_for(index: dict[str, str], lang: str, term: str) -> str | None:
-    """Look up a lexical gloss, unwrapping leftover redirect stubs from old indexes."""
-    gloss = index.get(f"{lang}\t{term}")
+    """Look up a lexical gloss, unwrapping leftover redirect stubs from old indexes.
+
+    Latin-family node langs (Late / Medieval / Vulgar / Old Latin) fall back to
+    the Classical Latin kaikki index. Macron folding covers dump spellings like
+    ``mūsēum`` vs indexed ``museum``.
+    """
+    langs = (lang, "Latin") if lang in _LATIN_FAMILY_GLOSS_LANGS else (lang,)
+    terms = (term, _fold_macrons(term)) if term != _fold_macrons(term) else (term,)
+    gloss = None
+    for try_lang in langs:
+        for try_term in terms:
+            gloss = index.get(f"{try_lang}\t{try_term}")
+            if gloss:
+                lang = try_lang
+                break
+        if gloss:
+            break
     if not gloss:
         return None
     if is_redirect_gloss(gloss):
