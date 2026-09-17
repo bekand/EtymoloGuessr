@@ -145,7 +145,7 @@ components:
           items: { $ref: "#/components/schemas/Choice" }
         promptGraph:
           $ref: "#/components/schemas/Graph"
-          description: Hard mode only. All gold nodes, ancestor gloss stripped, edges empty. Omitted for easy (use leafA/leafB).
+          description: Hard mode only. All gold nodes with glosses kept, edges empty. Omitted for easy (use leafA/leafB).
     SolveRequest:
       type: object
       properties:

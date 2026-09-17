@@ -28,3 +28,8 @@
 {"term": "junk compound", "lang": "English", "reltype": "inherited_from", "related_term": "foo", "related_lang": "Latin"}
 {"term": "-ness", "lang": "English", "reltype": "inherited_from", "related_term": "-nassu", "related_lang": "Old English"}
 {"term": "gift", "lang": "English", "reltype": "cognate_of", "related_term": "Gift", "related_lang": "German"}
+{"term": "son", "lang": "English", "reltype": "inherited_from", "related_term": "sunu", "related_lang": "Old English"}
+{"term": "son", "lang": "English", "reltype": "borrowed_from", "related_term": "son", "related_lang": "Spanish"}
+{"term": "sunu", "lang": "Old English", "reltype": "inherited_from", "related_term": "*sunuz", "related_lang": "Proto-Germanic"}
+{"term": "Sohn", "lang": "German", "reltype": "inherited_from", "related_term": "*sunuz", "related_lang": "Proto-Germanic"}
+{"term": "son", "lang": "Spanish", "reltype": "derived_from", "related_term": "sonus", "related_lang": "Latin"}

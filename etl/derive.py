@@ -58,10 +58,15 @@ def load_raw_edges(raw: Path | None = None) -> pd.DataFrame:
     return df[EDGE_COLUMNS]
 
 
-def reduce_edges(df: pd.DataFrame, cfg: dict[str, Any] | None = None) -> pd.DataFrame:
+def reduce_edges(
+    df: pd.DataFrame,
+    cfg: dict[str, Any] | None = None,
+    parents: dict[str, list[str]] | None = None,
+) -> pd.DataFrame:
     cfg = cfg or load_config()
     langs = allowed_languages(cfg)
     reltypes = set(cfg["keep_reltypes"])
+    ancestor_reltypes = set(cfg.get("ancestor_reltypes") or [])
     out = df.copy()
     for col in EDGE_COLUMNS:
         out[col] = out[col].where(out[col].notna(), None)
@@ -75,15 +80,97 @@ def reduce_edges(df: pd.DataFrame, cfg: dict[str, Any] | None = None) -> pd.Data
     dropped_lang = int((~mask_lang).sum())
     out = out.loc[mask_lang]
     out = out.drop_duplicates(subset=EDGE_COLUMNS)
+    out, drop_align, align_fallback = _align_ancestor_edges(out, parents, ancestor_reltypes)
     log.info(
-        "reduce_edges: in=%s drop_reltype=%s drop_junk=%s drop_lang=%s out=%s",
+        "reduce_edges: in=%s drop_reltype=%s drop_junk=%s drop_lang=%s drop_etym_align=%s "
+        "etym_align_fallback=%s out=%s",
         before,
         dropped_rel,
         dropped_junk,
         dropped_lang,
+        drop_align,
+        align_fallback,
         len(out),
     )
     return out.reset_index(drop=True)
+
+
+_PARENT_TEMPLATE_NAMES = frozenset({"inh", "bor", "der", "root"})
+
+
+def _template_arg(args: dict[str, Any], key: str) -> str:
+    raw = args.get(key)
+    if raw is None:
+        try:
+            raw = args.get(int(key))
+        except ValueError:
+            raw = None
+    if raw is None:
+        return ""
+    return str(raw).strip()
+
+
+def etymology_parent_terms(obj: dict[str, Any]) -> list[str]:
+    """Related terms from the gloss object's ``inh`` / ``bor`` / ``der`` / ``root`` templates.
+
+    Ignores nested ``etymon`` blobs. Parent term is template ``args["3"]``.
+    """
+    terms: list[str] = []
+    seen: set[str] = set()
+    for tmpl in obj.get("etymology_templates") or []:
+        if not isinstance(tmpl, dict):
+            continue
+        if tmpl.get("name") not in _PARENT_TEMPLATE_NAMES:
+            continue
+        args = tmpl.get("args") or {}
+        if not isinstance(args, dict):
+            continue
+        term = _template_arg(args, "3")
+        if not term or term in seen:
+            continue
+        seen.add(term)
+        terms.append(term)
+    return terms
+
+
+def _align_ancestor_edges(
+    df: pd.DataFrame,
+    parents: dict[str, list[str]] | None,
+    ancestor_reltypes: set[str],
+) -> tuple[pd.DataFrame, int, int]:
+    """Drop ancestor edges whose related_term is not in the winning-gloss allowlist.
+
+    If filtering would remove every ancestor edge for a source term, keep the
+    original ancestor edges for that term (template/dump spelling miss).
+    Non-ancestor reltypes are never filtered.
+    """
+    if not parents or df.empty or not ancestor_reltypes:
+        return df, 0, 0
+    allow = {k: set(v) for k, v in parents.items() if v}
+    if not allow:
+        return df, 0, 0
+    is_anc = df["reltype"].isin(ancestor_reltypes)
+    if not bool(is_anc.any()):
+        return df, 0, 0
+    keys = df["lang"].astype(str) + "\t" + df["term"].astype(str)
+    keep_idx: list[Any] = list(df.index[~is_anc])
+    dropped = 0
+    fallback = 0
+    anc = df.loc[is_anc]
+    grouped = anc.groupby(keys.loc[is_anc], sort=False)
+    for key, grp in grouped:
+        terms = allow.get(str(key))
+        if not terms:
+            keep_idx.extend(grp.index)
+            continue
+        hit = grp[grp["related_term"].isin(terms)]
+        if len(hit):
+            dropped += len(grp) - len(hit)
+            keep_idx.extend(hit.index)
+        else:
+            fallback += 1
+            keep_idx.extend(grp.index)
+    return df.loc[keep_idx], dropped, fallback
 
 
 def _sense_gloss_parts(sense: dict[str, Any]) -> list[str]:
@@ -266,14 +353,19 @@ def iter_gloss_files(raw: Path | None = None) -> Iterable[Path]:
 def index_gloss_objects(
     objects: Iterable[dict[str, Any]],
     langs: set[str] | None = None,
-) -> tuple[dict[str, str], dict[str, str]]:
+) -> tuple[dict[str, str], dict[str, str], dict[str, list[str]]]:
     """Index lexical glosses, then inherit lemma senses onto form-only keys.
 
-    Returns ``(gloss_index, lemma_index)``. ``lemma_index`` maps form-only
-    ``lang\\tterm`` keys to the citation lemma whose gloss was inherited.
+    Returns ``(gloss_index, lemma_index, etym_parents)``. ``lemma_index`` maps
+    form-only ``lang\\tterm`` keys to the citation lemma whose gloss was
+    inherited. ``etym_parents`` maps ``lang\\tterm`` to related terms from the
+    same kaikki object that supplied the stored gloss (``inh`` / ``bor`` /
+    ``der`` / ``root``). Form-only keys that inherit a gloss do not copy the
+    lemma's parent allowlist.
     """
     index: dict[str, str] = {}
     pending: dict[str, str] = {}
+    parents: dict[str, list[str]] = {}
     for obj in objects:
         lang = obj.get("lang")
         word = obj.get("word")
@@ -284,7 +376,11 @@ def index_gloss_objects(
         key = f"{lang}\t{word}"
         gloss = first_gloss(obj)
         if gloss:
-            index.setdefault(key, gloss)
+            if key not in index:
+                index[key] = gloss
+                parent_terms = etymology_parent_terms(obj)
+                if parent_terms:
+                    parents[key] = parent_terms
             pending.pop(key, None)
             continue
         if key in index:
@@ -310,12 +406,12 @@ def index_gloss_objects(
         index[key] = gloss
         if canon != term:
             lemmas[key] = canon
-    return index, lemmas
+    return index, lemmas, parents
 
 
 def index_glosses(
     raw: Path | None = None, langs: set[str] | None = None
-) -> tuple[dict[str, str], dict[str, str]]:
+) -> tuple[dict[str, str], dict[str, str], dict[str, list[str]]]:
     def _iter_objects() -> Iterable[dict[str, Any]]:
         n_lines = 0
         for path in iter_gloss_files(raw):
@@ -332,9 +428,14 @@ def index_glosses(
                         continue
         log.info("gloss_index: lines=%s", n_lines)
 
-    index, lemmas = index_gloss_objects(_iter_objects(), langs=langs)
-    log.info("gloss_index: unique=%s lemmas=%s", len(index), len(lemmas))
-    return index, lemmas
+    index, lemmas, parents = index_gloss_objects(_iter_objects(), langs=langs)
+    log.info(
+        "gloss_index: unique=%s lemmas=%s etym_parents=%s",
+        len(index),
+        len(lemmas),
+        len(parents),
+    )
+    return index, lemmas, parents
 
 
 def gloss_for(index: dict[str, str], lang: str, term: str) -> str | None:
@@ -372,6 +473,10 @@ def derived_lemma_path() -> Path:
     return derived_dir() / "lemma_index.json"
 
 
+def derived_etym_parents_path() -> Path:
+    return derived_dir() / "etym_parents.json"
+
+
 def derived_meta_path() -> Path:
     return derived_dir() / "meta.json"
 
@@ -384,16 +489,20 @@ def rebuild_derived(cfg: dict[str, Any] | None = None) -> None:
     cfg = cfg or load_config()
     dest = derived_dir()
     dest.mkdir(parents=True, exist_ok=True)
-    df = reduce_edges(load_raw_edges(), cfg)
-    df.to_parquet(derived_edges_path(), index=False)
     langs = allowed_languages(cfg)
-    glosses, lemmas = index_glosses(langs=langs)
+    glosses, lemmas, parents = index_glosses(langs=langs)
+    df = reduce_edges(load_raw_edges(), cfg, parents=parents)
+    df.to_parquet(derived_edges_path(), index=False)
     derived_gloss_path().write_text(json.dumps(glosses, ensure_ascii=False) + "\n", encoding="utf-8")
     derived_lemma_path().write_text(json.dumps(lemmas, ensure_ascii=False) + "\n", encoding="utf-8")
+    derived_etym_parents_path().write_text(
+        json.dumps(parents, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
     meta = {
         "n_edges": int(len(df)),
         "n_glosses": len(glosses),
         "n_lemmas": len(lemmas),
+        "n_etym_parents": len(parents),
         "reltypes": df["reltype"].value_counts().to_dict() if len(df) else {},
         "langs": df["lang"].value_counts().to_dict() if len(df) else {},
     }
@@ -420,3 +529,11 @@ def load_lemma_index() -> dict[str, str]:
     if not path.exists():
         return {}
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def load_etym_parents() -> dict[str, list[str]]:
+    path = derived_etym_parents_path()
+    if not path.exists():
+        return {}
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    return {str(k): [str(t) for t in v] for k, v in raw.items()}

@@ -59,7 +59,7 @@ src/
 
 ## Hard mode
 
-1. `GET /puzzles/random?mode=hard` — only puzzles with **≥ 4 graph nodes**. `promptGraph` has every gold node, ancestor gloss stripped, `edges: []`. Terms stay so known ancestor cards can be placed. The UI ignores `choices`.
+1. `GET /puzzles/random?mode=hard` — only puzzles with **≥ 4 graph nodes**. `promptGraph` has every gold node (glosses kept), `edges: []`. Terms stay so known ancestor cards can be placed. The UI ignores `choices`.
 2. Same per-mode `localStorage` lock as Easy: reload re-fetches `GET /puzzles/{id}?mode=hard`; **404** clears the lock.
 3. **No nodes start on the blotter** — leaves and ancestors sit in a post-it palette. Place every card (click or drag), then draw directed edges **child → ancestor**. Player edges have no relation-type labels.
 4. Submit is disabled until every node is placed (hint: “Build the graph!”). Score is an exact directed edge-set match (ignore order and `reltype`).

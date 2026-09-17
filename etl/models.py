@@ -54,10 +54,9 @@ class Choice:
 
 
 def prompt_graph_from_answer(answer_graph: dict[str, Any]) -> dict[str, Any]:
-    """Player-facing prompt: same nodes as gold, no edges.
+    """Player-facing prompt: same nodes as gold (glosses included), no edges.
 
-    Hard mode (future API) may further strip ancestor labels; easy mode
-    hides gold until solve. Both start from this derivation of answer_graph.
+    Hard mode derives this at serve time; easy mode omits the graph until solve.
     Not persisted — derive at inspect/API serve time.
     """
     return {"nodes": list(answer_graph.get("nodes") or []), "edges": []}

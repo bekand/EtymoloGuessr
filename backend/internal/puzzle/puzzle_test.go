@@ -23,7 +23,7 @@ func TestPromptGraphEasyIsNil(t *testing.T) {
 	}
 }
 
-func TestPromptGraphHardStripsAncestorGloss(t *testing.T) {
+func TestPromptGraphHardKeepsAncestorGloss(t *testing.T) {
 	g := PromptGraph(sampleGraph(), ModeHard)
 	if g == nil {
 		t.Fatal("hard prompt should be present")
@@ -34,13 +34,20 @@ func TestPromptGraphHardStripsAncestorGloss(t *testing.T) {
 	if len(g.Nodes) != 3 {
 		t.Fatalf("hard prompt should keep all nodes, got %d", len(g.Nodes))
 	}
+	foundAncestor := false
 	for _, n := range g.Nodes {
-		if n.Role != "leaf" && n.Gloss != nil {
-			t.Fatalf("hard prompt leaked ancestor gloss on %s", n.ID)
+		if n.Role != "leaf" {
+			foundAncestor = true
+			if n.Gloss == nil || *n.Gloss != "father" {
+				t.Fatalf("hard prompt should keep ancestor gloss on %s, got %v", n.ID, n.Gloss)
+			}
+			if n.Term == "" {
+				t.Fatalf("hard prompt should keep ancestor term for placement")
+			}
 		}
-		if n.Role != "leaf" && n.Term == "" {
-			t.Fatalf("hard prompt should keep ancestor term for placement")
-		}
+	}
+	if !foundAncestor {
+		t.Fatal("hard prompt should include ancestor nodes")
 	}
 }
 

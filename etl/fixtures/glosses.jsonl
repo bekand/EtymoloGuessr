@@ -37,3 +37,10 @@
 {"word": "hostis", "lang": "Latin", "senses": [{"glosses": ["a stranger; an enemy"]}]}
 {"word": "Paris", "lang": "English", "senses": [{"glosses": ["the capital city of France"]}]}
 {"word": "Parisii", "lang": "Latin", "senses": [{"glosses": ["a Gallic tribe"]}]}
+{"word": "son", "lang": "English", "senses": [{"glosses": ["One's male offspring."]}], "etymology_templates": [{"name": "etymon", "args": {"1": "en", "3": "ignored"}}, {"name": "inh", "args": {"1": "en", "2": "ang", "3": "sunu"}}, {"name": "inh", "args": {"1": "en", "2": "gem-pro", "3": "*sunuz"}}]}
+{"word": "son", "lang": "English", "senses": [{"glosses": ["Son cubano, a genre of music."]}], "etymology_templates": [{"name": "bor", "args": {"1": "en", "2": "es", "3": "son"}}]}
+{"word": "Sohn", "lang": "German", "senses": [{"glosses": ["a boy relative of his parents"]}]}
+{"word": "sunu", "lang": "Old English", "senses": [{"glosses": ["a male child"]}]}
+{"word": "*sunuz", "lang": "Proto-Germanic", "senses": [{"glosses": ["a male descendant in a family line"]}]}
+{"word": "son", "lang": "Spanish", "senses": [{"glosses": ["a musical genre; a pleasant sound"]}]}
+{"word": "sonus", "lang": "Latin", "senses": [{"glosses": ["sound, noise; pitch"]}]}

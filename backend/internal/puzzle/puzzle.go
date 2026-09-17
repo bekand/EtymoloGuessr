@@ -86,14 +86,8 @@ func PromptGraph(answer Graph, mode Mode) *Graph {
 	if mode != ModeHard {
 		return nil
 	}
-	nodes := make([]Node, 0, len(answer.Nodes))
-	for _, n := range answer.Nodes {
-		node := n
-		if node.Role != "leaf" {
-			node.Gloss = nil
-		}
-		nodes = append(nodes, node)
-	}
+	nodes := make([]Node, len(answer.Nodes))
+	copy(nodes, answer.Nodes)
 	return &Graph{Nodes: nodes, Edges: []Edge{}}
 }
 

@@ -25,6 +25,7 @@ def test_refresh_fixtures_generate_validate_inspect(data_home: Path):
     assert (data_home / "raw" / "NOTICE").exists()
     assert (data_home / "derived" / "edges.parquet").exists()
     assert (data_home / "derived" / "lemma_index.json").exists()
+    assert (data_home / "derived" / "etym_parents.json").exists()
 
     result = runner.invoke(app, ["doctor"])
     assert result.exit_code == 0, result.output
@@ -39,6 +40,8 @@ def test_refresh_fixtures_generate_validate_inspect(data_home: Path):
     assert len(ids) == len(puzzles)
     for p in puzzles:
         assert 2 <= len(p["answer_graph"]["nodes"]) <= 9
+        for node in p["answer_graph"]["nodes"]:
+            assert node.get("gloss")
         assert "prompt_graph" not in p
         assert len(p["choices"]) == 4
         assert isinstance(p["quality_score"], int)
@@ -51,6 +54,8 @@ def test_refresh_fixtures_generate_validate_inspect(data_home: Path):
         assert terms != {"padre"}
         assert "Paris" not in terms
         assert p["leaf_a"]["lang"] != p["leaf_b"]["lang"]
+        for edge in p["answer_graph"]["edges"]:
+            assert not (edge.get("from") == "English:son" and edge.get("to") == "Spanish:son")
 
     # Leaf reuse: no (lang, term) appears twice as a leaf across the batch.
     seen_leaves: set[tuple[str, str]] = set()

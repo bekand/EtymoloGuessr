@@ -509,7 +509,13 @@ def make_choices(
     return choices, correct_id
 
 
-def to_puzzle(cand: dict[str, Any], choices: list[dict[str, Any]], correct: str, g: nx.DiGraph) -> Puzzle:
+def to_puzzle(
+    cand: dict[str, Any],
+    choices: list[dict[str, Any]],
+    correct: str,
+    g: nx.DiGraph,
+    glosses: dict[str, str],
+) -> Puzzle:
     nodes = []
     leaf_ids = {
         node_id(cand["leaf_a"]["lang"], cand["leaf_a"]["term"]),
@@ -518,17 +524,12 @@ def to_puzzle(cand: dict[str, Any], choices: list[dict[str, Any]], correct: str,
     for nid in cand["nodes"]:
         data = g.nodes[nid]
         role = "leaf" if nid in leaf_ids else "ancestor"
-        gloss = cand["leaf_a"]["gloss"] if nid == node_id(cand["leaf_a"]["lang"], cand["leaf_a"]["term"]) else None
-        if nid == node_id(cand["leaf_b"]["lang"], cand["leaf_b"]["term"]):
-            gloss = cand["leaf_b"]["gloss"]
-        if role == "ancestor":
-            gloss = cand["lca"]["gloss"] if nid == cand["lca"]["id"] else gloss
         nodes.append(
             GraphNode(
                 id=nid,
                 lang=data["lang"],
                 term=data["term"],
-                gloss=gloss,
+                gloss=gloss_for(glosses, data["lang"], data["term"]),
                 role=role,
             ).to_dict()
         )
@@ -639,7 +640,7 @@ def generate_puzzles(
             funnel.bump("insufficient_distractors")
             continue
         choices, correct = built
-        puzzles.append(to_puzzle(cand, choices, correct, g))
+        puzzles.append(to_puzzle(cand, choices, correct, g, glosses))
         used_leaves.add(key_a)
         used_leaves.add(key_b)
         funnel.bump("emitted")

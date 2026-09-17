@@ -30,10 +30,10 @@ export const hardPrompt: PuzzlePrompt = {
   choices: easyPrompt.choices,
   promptGraph: {
     nodes: [
-      { id: 'English:father', lang: 'English', term: 'father', role: 'leaf' },
-      { id: 'German:Vater', lang: 'German', term: 'Vater', role: 'leaf' },
-      { id: 'Proto-Germanic:*fader', lang: 'Proto-Germanic', term: '*fader', role: 'ancestor' },
-      { id: 'Proto-Indo-European:*ph2ter', lang: 'Proto-Indo-European', term: '*ph₂tḗr', role: 'ancestor' },
+      { id: 'English:father', lang: 'English', term: 'father', gloss: 'male parent', role: 'leaf' },
+      { id: 'German:Vater', lang: 'German', term: 'Vater', gloss: 'father', role: 'leaf' },
+      { id: 'Proto-Germanic:*fader', lang: 'Proto-Germanic', term: '*fader', gloss: 'a male parent', role: 'ancestor' },
+      { id: 'Proto-Indo-European:*ph2ter', lang: 'Proto-Indo-European', term: '*ph₂tḗr', gloss: 'father', role: 'ancestor' },
     ],
     edges: [],
   },

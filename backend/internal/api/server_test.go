@@ -109,7 +109,7 @@ func testHandler() http.Handler {
 	return testHandlerWith(fixturePuzzle())
 }
 
-func TestRandomHardKeepsAncestorsWithoutGloss(t *testing.T) {
+func TestRandomHardKeepsAncestorGloss(t *testing.T) {
 	srv := httptest.NewServer(testHandlerWith(fixtureHardPuzzle()))
 	defer srv.Close()
 
@@ -132,8 +132,8 @@ func TestRandomHardKeepsAncestorsWithoutGloss(t *testing.T) {
 	for _, n := range payload.PromptGraph.Nodes {
 		if n.Role == "ancestor" {
 			foundAncestor = true
-			if n.Gloss != nil {
-				t.Fatalf("ancestor gloss leaked: %v", *n.Gloss)
+			if n.Gloss == nil || *n.Gloss != "a male parent" {
+				t.Fatalf("ancestor gloss missing on %s, got %v", n.ID, n.Gloss)
 			}
 			if n.Term == "" {
 				t.Fatal("ancestor term should remain for placement")

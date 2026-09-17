@@ -3,7 +3,14 @@ from typing import Any, cast
 import pandas as pd
 import pytest
 
-from etl.derive import first_gloss, index_gloss_objects, is_grammatical_gloss, is_junk_term
+from etl.derive import (
+    etymology_parent_terms,
+    first_gloss,
+    index_gloss_objects,
+    is_grammatical_gloss,
+    is_junk_term,
+    reduce_edges,
+)
 from etl.generate import (
     Funnel,
     build_graph,
@@ -19,7 +26,7 @@ from etl.generate import (
 )
 from etl.ids import puzzle_id
 from etl.validate import validate_puzzles
-from etl.models import Puzzle
+from etl.models import Puzzle, node_id
 
 
 def test_first_gloss_joins_colon_qualifier():
@@ -114,7 +121,7 @@ def test_first_gloss_skips_grammatical_forms_without_form_of():
 
 
 def test_index_glosses_inherits_form_only_lemma():
-    glosses, lemmas = index_gloss_objects(
+    glosses, lemmas, _parents = index_gloss_objects(
         [
             {
                 "lang": "Latin",
@@ -152,7 +159,7 @@ def test_index_glosses_inherits_form_only_lemma():
 
 def test_index_glosses_keeps_lexical_homograph_not_lemma():
     """Latin factum has a noun sense; do not redirect to faciō."""
-    glosses, lemmas = index_gloss_objects(
+    glosses, lemmas, _parents = index_gloss_objects(
         [
             {
                 "lang": "Latin",
@@ -179,6 +186,166 @@ def test_index_glosses_keeps_lexical_homograph_not_lemma():
     assert glosses["Latin\tfactum"] == "fact, deed, act, doing, work"
     assert "Latin\tfactum" not in lemmas
     assert lemmas == {}
+
+
+def test_etymology_parent_terms_ignores_etymon_and_reads_arg3():
+    terms = etymology_parent_terms(
+        {
+            "etymology_templates": [
+                {"name": "etymon", "args": {"1": "en", "3": "ignored"}},
+                {"name": "inh", "args": {"1": "en", "2": "ang", "3": "sunu"}},
+                {"name": "inh", "args": {"1": "en", "2": "gem-pro", "3": "*sunuz"}},
+                {"name": "bor", "args": {"1": "en", "2": "es", "3": "son"}},
+                {"name": "der", "args": {"1": "en", "2": "ine-pro", "3": "*sewH-"}},
+                {"name": "root", "args": {1: "en", 2: "ine-pro", 3: "*sewH-"}},
+            ]
+        }
+    )
+    assert terms == ["sunu", "*sunuz", "son", "*sewH-"]
+
+
+def test_index_glosses_parents_come_from_winning_etymology_only():
+    glosses, _lemmas, parents = index_gloss_objects(
+        [
+            {
+                "lang": "English",
+                "word": "son",
+                "senses": [{"glosses": ["One's male offspring."]}],
+                "etymology_templates": [
+                    {"name": "inh", "args": {"1": "en", "2": "ang", "3": "sunu"}},
+                ],
+            },
+            {
+                "lang": "English",
+                "word": "son",
+                "senses": [{"glosses": ["Son cubano, a genre of music."]}],
+                "etymology_templates": [
+                    {"name": "bor", "args": {"1": "en", "2": "es", "3": "son"}},
+                ],
+            },
+        ]
+    )
+    assert glosses["English\tson"] == "One's male offspring."
+    assert parents["English\tson"] == ["sunu"]
+
+
+def test_index_glosses_does_not_copy_parents_onto_form_only_lemmas():
+    _glosses, lemmas, parents = index_gloss_objects(
+        [
+            {
+                "lang": "Latin",
+                "word": "addere",
+                "senses": [
+                    {
+                        "glosses": ["present active infinitive of addō"],
+                        "form_of": [{"word": "addō"}],
+                    }
+                ],
+            },
+            {
+                "lang": "Latin",
+                "word": "addō",
+                "senses": [{"glosses": ["to add, attach, join"]}],
+                "etymology_templates": [
+                    {"name": "inh", "args": {"1": "la", "2": "itc-pro", "3": "*ad-dō"}},
+                ],
+            },
+        ]
+    )
+    assert lemmas["Latin\taddere"] == "addō"
+    assert parents["Latin\taddō"] == ["*ad-dō"]
+    assert "Latin\taddere" not in parents
+
+
+def _reduce_cfg() -> dict[str, Any]:
+    return {
+        "leaf_languages": {"English": "en", "Spanish": "es", "Portuguese": "pt", "German": "de"},
+        "ancestor_languages": ["Old English", "Proto-Germanic", "Latin"],
+        "keep_reltypes": [
+            "inherited_from",
+            "borrowed_from",
+            "derived_from",
+            "root",
+            "cognate_of",
+        ],
+        "ancestor_reltypes": ["inherited_from", "borrowed_from", "derived_from", "root"],
+    }
+
+
+def test_reduce_edges_drops_unaligned_borrow_keeps_cognate():
+    df = pd.DataFrame(
+        [
+            dict(term="son", lang="English", reltype="inherited_from", related_term="sunu", related_lang="Old English"),
+            dict(term="son", lang="English", reltype="borrowed_from", related_term="son", related_lang="Spanish"),
+            dict(term="son", lang="English", reltype="cognate_of", related_term="Sohn", related_lang="German"),
+        ]
+    )
+    out = reduce_edges(df, _reduce_cfg(), parents={"English\tson": ["sunu", "*sunuz"]})
+    pairs = set(zip(out["reltype"], out["related_term"], out["related_lang"]))
+    assert ("inherited_from", "sunu", "Old English") in pairs
+    assert ("borrowed_from", "son", "Spanish") not in pairs
+    assert ("cognate_of", "Sohn", "German") in pairs
+
+
+def test_reduce_edges_falls_back_when_allowlist_matches_nothing():
+    df = pd.DataFrame(
+        [
+            dict(term="foo", lang="English", reltype="inherited_from", related_term="bar", related_lang="Latin"),
+        ]
+    )
+    out = reduce_edges(df, _reduce_cfg(), parents={"English\tfoo": ["zzz"]})
+    assert len(out) == 1
+    assert out.iloc[0]["related_term"] == "bar"
+
+
+def test_extract_candidates_son_does_not_walk_spanish_borrow():
+    rows = [
+        dict(term="son", lang="English", reltype="inherited_from", related_term="sunu", related_lang="Old English"),
+        dict(term="son", lang="English", reltype="borrowed_from", related_term="son", related_lang="Spanish"),
+        dict(term="sunu", lang="Old English", reltype="inherited_from", related_term="*sunuz", related_lang="Proto-Germanic"),
+        dict(term="Sohn", lang="German", reltype="inherited_from", related_term="*sunuz", related_lang="Proto-Germanic"),
+        dict(term="son", lang="Spanish", reltype="derived_from", related_term="sonus", related_lang="Latin"),
+        dict(term="sónico", lang="Spanish", reltype="derived_from", related_term="sonus", related_lang="Latin"),
+    ]
+    df = reduce_edges(
+        pd.DataFrame(rows),
+        _reduce_cfg(),
+        parents={"English\tson": ["sunu", "*sunuz"]},
+    )
+    glosses = {
+        "English\tson": "One's male offspring.",
+        "German\tSohn": "a boy relative of his parents",
+        "Spanish\tsónico": "sonic",
+        "Old English\tsunu": "a male child",
+        "Proto-Germanic\t*sunuz": "a male descendant in a family line",
+        "Latin\tsonus": "sound, noise; pitch",
+        "Spanish\tson": "a musical genre; a pleasant sound",
+    }
+    g = build_graph(df, {"inherited_from", "borrowed_from", "derived_from", "root"})
+    cfg = {
+        "leaf_languages": {"English": "en", "Spanish": "es", "Portuguese": "pt", "German": "de"},
+        "ancestor_reltypes": ["inherited_from", "borrowed_from", "derived_from", "root"],
+        "generate": {"max_nodes": 9, "max_gloss_overlap": 0.5},
+    }
+    funnel = Funnel()
+    cands = extract_candidates(g, glosses, cfg, funnel)
+    son_pairs = [
+        c
+        for c in cands
+        if {c["leaf_a"]["term"], c["leaf_b"]["term"]} == {"son", "Sohn"}
+        and {c["leaf_a"]["lang"], c["leaf_b"]["lang"]} == {"English", "German"}
+    ]
+    assert son_pairs, f"expected son/Sohn candidate, got {[(c['leaf_a'], c['leaf_b'], c['lca']) for c in cands]}"
+    gold = {(e.source, e.target) for e in son_pairs[0]["edges"]}
+    assert ("English:son", "Spanish:son") not in gold
+    assert son_pairs[0]["lca"]["term"] == "*sunuz"
+    mixed = [
+        c
+        for c in cands
+        if {node_id(c["leaf_a"]["lang"], c["leaf_a"]["term"]), node_id(c["leaf_b"]["lang"], c["leaf_b"]["term"])}
+        == {"English:son", "Spanish:sónico"}
+    ]
+    assert mixed == []
 
 
 def test_first_gloss_empty_or_missing_senses():

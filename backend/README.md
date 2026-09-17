@@ -54,12 +54,12 @@ Query:
 
 Only `enabled = true` rows. `404` if none match.
 
-**Never included:** `correctChoice`, gold edges, ancestor meanings that would give away the MC answer.
+**Never included:** `correctChoice`, gold edges.
 
 | Mode | `promptGraph` |
 |---|---|
 | `easy` | Omitted. The two words are `leafA` / `leafB`; the graph is only in the solve response (`goldGraph`) |
-| `hard` | All nodes; ancestor `gloss` stripped; `edges: []`. Terms stay so the player can place known ancestor cards |
+| `hard` | All nodes with glosses kept; `edges: []`. Terms stay so the player can place known ancestor cards |
 
 `choices` are always sent (unmarked). Hard UI can ignore them.
 
@@ -71,7 +71,7 @@ Query:
 |---|---|---|
 | `mode` | `easy` | `easy` or `hard` |
 
-Same prompt as random for that id: Easy omits `promptGraph`; Hard sends all nodes, ancestor gloss stripped, empty edges. Never `correctChoice` or gold edges.
+Same prompt as random for that id: Easy omits `promptGraph`; Hard sends all nodes with glosses kept, empty edges. Never `correctChoice` or gold edges.
 
 The UI lock re-fetches this after refresh. `404` if the puzzle is missing, disabled, or not eligible for the mode (Hard needs ≥ 4 nodes) — that clears a lock when `generate --db` replaced the table. Invalid `mode` → `400`.
 
