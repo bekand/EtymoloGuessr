@@ -31,6 +31,7 @@ def test_refresh_fixtures_generate_validate_inspect(data_home: Path):
     assert (data_home / "raw" / "etymology.jsonl").exists()
     assert (data_home / "raw" / "NOTICE").exists()
     assert (data_home / "derived" / "edges.parquet").exists()
+    assert (data_home / "derived" / "lemma_index.json").exists()
 
     result = runner.invoke(app, ["doctor"])
     assert result.exit_code == 0, result.output
@@ -162,6 +163,38 @@ def test_mutual_exclusive_sinks(data_home: Path):
     runner.invoke(app, ["refresh", "--fixtures"])
     result = runner.invoke(app, ["generate", "--stdout", "--db"])
     assert result.exit_code != 0
+
+
+def test_generate_db_truncates_before_upsert(data_home: Path, monkeypatch: pytest.MonkeyPatch):
+    assert runner.invoke(app, ["refresh", "--fixtures"]).exit_code == 0
+    calls: list[object] = []
+
+    def fake_truncate() -> None:
+        calls.append("truncate")
+
+    def fake_upsert(puzzles):
+        calls.append(("upsert", len(puzzles)))
+        return len(puzzles)
+
+    monkeypatch.setattr("etl.cli.truncate_puzzles", fake_truncate)
+    monkeypatch.setattr("etl.cli.upsert_puzzles", fake_upsert)
+    result = runner.invoke(app, ["generate", "--db", "--n", "2", "--seed", "1"])
+    assert result.exit_code == 0, result.output
+    assert calls[0] == "truncate"
+    assert calls[1][0] == "upsert"
+    assert calls[1][1] >= 1
+    assert "replaced" in result.stdout
+
+
+def test_generate_db_dry_run_does_not_write(data_home: Path, monkeypatch: pytest.MonkeyPatch):
+    assert runner.invoke(app, ["refresh", "--fixtures"]).exit_code == 0
+    calls: list[str] = []
+    monkeypatch.setattr("etl.cli.truncate_puzzles", lambda: calls.append("truncate"))
+    monkeypatch.setattr("etl.cli.upsert_puzzles", lambda puzzles: calls.append("upsert") or len(puzzles))
+    result = runner.invoke(app, ["generate", "--db", "--dry-run", "--n", "2", "--seed", "1"])
+    assert result.exit_code == 0, result.output
+    assert calls == []
+    assert "dry-run" in result.stdout
 
 
 def test_database_url_missing_config_returns_none(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):

@@ -104,12 +104,12 @@ cd backend
 go run ./cmd/api
 ```
 
-Load puzzles (ETL, repo root). JSONL and Postgres are separate: `generate --jsonl` does not touch the DB; `generate --db` re-walks derived data and ignores any existing file.
+Load puzzles (ETL, repo root). JSONL and Postgres are separate: `generate --jsonl` does not touch the DB; `generate --db` re-walks derived data, truncates `puzzles` and `scores`, then upserts (it does not read JSONL).
 
 ```bash
-# reuse a file you already generated
+# reuse a file you already generated (upsert; does not truncate)
 uv run etl load data/puzzles/puzzles.jsonl
-# extract from derived into Postgres only (does not write or read JSONL)
+# extract from derived into Postgres only (replaces puzzle rows; does not write or read JSONL)
 uv run etl generate --db --n 50 --seed 1
 ```
 

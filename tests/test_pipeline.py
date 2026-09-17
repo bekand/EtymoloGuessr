@@ -3,7 +3,7 @@ from typing import Any, cast
 import pandas as pd
 import pytest
 
-from etl.derive import first_gloss, is_junk_term
+from etl.derive import first_gloss, index_gloss_objects, is_grammatical_gloss, is_junk_term
 from etl.generate import (
     Funnel,
     build_graph,
@@ -82,6 +82,95 @@ def test_first_gloss_skips_inflection_senses():
         )
         == "a courtyard"
     )
+
+
+def test_first_gloss_skips_grammatical_forms_without_form_of():
+    assert first_gloss({"senses": [{"glosses": ["present active infinitive of superō"]}]}) is None
+    assert first_gloss(
+        {
+            "senses": [
+                {
+                    "glosses": ["accusative/ablative singular of tū"],
+                    "tags": ["accusative", "form-of"],
+                }
+            ]
+        }
+    ) is None
+    assert (
+        first_gloss({"senses": [{"glosses": ["masculine, male (of humans or animals)"]}]})
+        == "masculine, male (of humans or animals)"
+    )
+    assert not is_grammatical_gloss("masculine, male (of humans or animals)")
+    assert not is_grammatical_gloss("present, a gift given to someone")
+    assert is_grammatical_gloss("present active infinitive of superō")
+
+
+def test_index_glosses_inherits_form_only_lemma():
+    glosses, lemmas = index_gloss_objects(
+        [
+            {
+                "lang": "Latin",
+                "word": "addere",
+                "senses": [
+                    {
+                        "glosses": ["present active infinitive of addō"],
+                        "form_of": [{"word": "addō"}],
+                    }
+                ],
+            },
+            {
+                "lang": "Latin",
+                "word": "superare",
+                "senses": [{"glosses": ["present active infinitive of superō"]}],
+            },
+            {
+                "lang": "Latin",
+                "word": "addō",
+                "senses": [{"glosses": ["to add, attach, join"]}],
+            },
+            {
+                "lang": "Latin",
+                "word": "supero",
+                "senses": [{"glosses": ["to overcome, surpass"]}],
+            },
+        ]
+    )
+    assert glosses["Latin\taddō"] == "to add, attach, join"
+    assert glosses["Latin\taddere"] == "to add, attach, join"
+    assert lemmas["Latin\taddere"] == "addō"
+    assert glosses["Latin\tsuperare"] == "to overcome, surpass"
+    assert lemmas["Latin\tsuperare"] == "supero"
+
+
+def test_index_glosses_keeps_lexical_homograph_not_lemma():
+    """Latin factum has a noun sense; do not redirect to faciō."""
+    glosses, lemmas = index_gloss_objects(
+        [
+            {
+                "lang": "Latin",
+                "word": "factum",
+                "senses": [
+                    {
+                        "glosses": ["accusative supine of faciō and fīō"],
+                        "form_of": [{"word": "faciō and fīō"}],
+                    }
+                ],
+            },
+            {
+                "lang": "Latin",
+                "word": "factum",
+                "senses": [{"glosses": ["fact, deed, act, doing, work"]}],
+            },
+            {
+                "lang": "Latin",
+                "word": "faciō",
+                "senses": [{"glosses": ["to do, to make"]}],
+            },
+        ]
+    )
+    assert glosses["Latin\tfactum"] == "fact, deed, act, doing, work"
+    assert "Latin\tfactum" not in lemmas
+    assert lemmas == {}
 
 
 def test_first_gloss_empty_or_missing_senses():
@@ -334,6 +423,86 @@ def test_extract_candidates_rejects_missing_lca_gloss():
     assert funnel.counts.get("candidates", 0) == 0
 
 
+def test_extract_candidates_rewrites_form_only_lca_to_lemma():
+    """Form-only Latin infinitive LCA is replaced by the citation verb."""
+    rows = [
+        dict(term="additive", lang="English", reltype="derived_from", related_term="addere", related_lang="Latin"),
+        dict(term="addieren", lang="German", reltype="derived_from", related_term="addere", related_lang="Latin"),
+    ]
+    glosses = {
+        "English\tadditive": "a substance mixed into food",
+        "German\taddieren": "perform arithmetic summation",
+        "Latin\taddere": "to add, attach, join",
+        "Latin\taddō": "to add, attach, join",
+    }
+    lemmas = {"Latin\taddere": "addō"}
+    g = build_graph(pd.DataFrame(rows), {"derived_from"})
+    cfg = {
+        "leaf_languages": {"English": "en", "Spanish": "es", "Portuguese": "pt", "German": "de"},
+        "ancestor_reltypes": ["derived_from"],
+        "generate": {
+            "max_nodes": 9,
+            "max_gloss_overlap": 0.5,
+        },
+    }
+    funnel = Funnel()
+    cands = extract_candidates(g, glosses, cfg, funnel, lemmas=lemmas)
+    assert len(cands) == 1
+    lca = cands[0]["lca"]
+    assert lca["lang"] == "Latin"
+    assert lca["term"] == "addō"
+    assert lca["gloss"] == "to add, attach, join"
+    assert lca["id"] == "Latin:addō"
+    assert "Latin:addere" not in cands[0]["nodes"]
+    assert "Latin:addō" in cands[0]["nodes"]
+
+
+def test_extract_candidates_keeps_lexical_homograph_lca():
+    """factum with a noun gloss is not rewritten to faciō."""
+    rows = [
+        dict(term="factoid", lang="English", reltype="derived_from", related_term="factum", related_lang="Latin"),
+        dict(term="Faktum", lang="German", reltype="derived_from", related_term="factum", related_lang="Latin"),
+    ]
+    glosses = {
+        "English\tfactoid": "a dubious or insignificant fact",
+        "German\tFaktum": "something concrete used as a basis for interpretation",
+        "Latin\tfactum": "deed, act, doing, work",
+        "Latin\tfaciō": "to do, to make",
+    }
+    g = build_graph(pd.DataFrame(rows), {"derived_from"})
+    cfg = {
+        "leaf_languages": {"English": "en", "Spanish": "es", "Portuguese": "pt", "German": "de"},
+        "ancestor_reltypes": ["derived_from"],
+        "generate": {
+            "max_nodes": 9,
+            "max_gloss_overlap": 0.5,
+        },
+    }
+    funnel = Funnel()
+    cands = extract_candidates(g, glosses, cfg, funnel, lemmas={})
+    assert len(cands) == 1
+    assert cands[0]["lca"]["term"] == "factum"
+    assert cands[0]["lca"]["gloss"] == "deed, act, doing, work"
+
+
+def test_extract_candidates_rejects_leftover_grammatical_lca_gloss():
+    rows = [
+        dict(term="leafx", lang="English", reltype="inherited_from", related_term="fare", related_lang="Latin"),
+        dict(term="leafy", lang="German", reltype="inherited_from", related_term="fare", related_lang="Latin"),
+    ]
+    glosses = {
+        "English\tleafx": "modern sense alpha zebra",
+        "German\tleafy": "modern sense beta quartz",
+        "Latin\tfare": "second-person singular present active indicative of for",
+    }
+    g = build_graph(pd.DataFrame(rows), {"inherited_from"})
+    funnel = Funnel()
+    cands = extract_candidates(g, glosses, _two_leaf_lca_cfg(), funnel)
+    assert cands == []
+    assert funnel.counts.get("inflection_lca", 0) >= 1
+    assert funnel.counts.get("candidates", 0) == 0
+
+
 def test_extract_candidates_rejects_leaf_term_in_lca_gloss():
     """Both leaves still same meaning when each term appears in the LCA gloss."""
     rows = [
@@ -343,7 +512,7 @@ def test_extract_candidates_rejects_leaf_term_in_lca_gloss():
     glosses = {
         "English\thound": "a hunting dog",
         "German\tHund": "a domestic animal",
-        "Proto-Germanic\t*hundaz": "a hound or hund; a dog",
+        "Proto-Germanic\t*hundaz": "an animal such as a hound or hund",
     }
     g = build_graph(pd.DataFrame(rows), {"inherited_from"})
     funnel = Funnel()

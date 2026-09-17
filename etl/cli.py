@@ -71,7 +71,7 @@ def generate(
     db: bool = typer.Option(
         False,
         "--db",
-        help="Upsert a fresh generate run into Postgres (does not read JSONL; use etl load for that)",
+        help="Replace Postgres puzzles with a fresh generate run (truncates puzzles+scores; does not read JSONL)",
     ),
     dry_run: bool = typer.Option(False, "--dry-run", help="Counts and funnel only, no write"),
     verbose: bool = typer.Option(
@@ -85,7 +85,8 @@ def generate(
 
     One sink only: default JSONL, --jsonl PATH, --stdout, or --db.
     Writing JSONL does not touch Postgres. --db always regenerates from
-    derived data and ignores any existing JSONL (use `etl load` to upsert a file).
+    derived data, truncates puzzles and scores, then upserts (use `etl load`
+    to merge a file without truncating).
     """
     sinks = sum([stdout, db, jsonl is not None])
     if sinks > 1:
@@ -115,10 +116,11 @@ def generate(
             typer.echo(f"[generate] write stdout: {len(puzzles)} puzzles", err=True)
         return
     if db:
+        truncate_puzzles()
         count = upsert_puzzles(puzzles)
-        typer.echo(f"upserted {count} puzzles")
+        typer.echo(f"replaced {count} puzzles")
         if verbose:
-            typer.echo(f"[generate] write db: upserted {count}", err=True)
+            typer.echo(f"[generate] write db: truncated then upserted {count}", err=True)
         return
     dest = jsonl or default_puzzles_jsonl()
     write_jsonl(puzzles, dest)

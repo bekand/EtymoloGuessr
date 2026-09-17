@@ -10,7 +10,14 @@ from typing import Any, Callable
 
 import networkx as nx
 
-from etl.derive import gloss_for, load_derived_edges, load_gloss_index
+from etl.derive import (
+    canonical_lemma,
+    gloss_for,
+    is_grammatical_gloss,
+    load_derived_edges,
+    load_gloss_index,
+    load_lemma_index,
+)
 from etl.ids import puzzle_id
 from etl.models import GraphEdge, GraphNode, Puzzle, node_id
 from etl.paths import load_config, reports_dir
@@ -173,6 +180,39 @@ def subgraph_from_paths(path_a: list[str], path_b: list[str]) -> list[str]:
     return seen
 
 
+def _rewrite_form_lca(
+    g: nx.DiGraph,
+    chosen: str,
+    lemma_term: str,
+    path_a: list[str],
+    path_b: list[str],
+    node_list: list[str],
+) -> tuple[str, list[str], list[str], list[str]]:
+    """Swap a form-only LCA node for its citation lemma. Mutates ``g`` by adding the lemma node/edges."""
+    data = g.nodes[chosen]
+    lang = data["lang"]
+    new_id = node_id(lang, lemma_term)
+    if new_id == chosen:
+        return chosen, path_a, path_b, node_list
+    if new_id not in g:
+        g.add_node(new_id, lang=lang, term=lemma_term)
+    else:
+        g.nodes[new_id].setdefault("lang", lang)
+        g.nodes[new_id].setdefault("term", lemma_term)
+    for path in (path_a, path_b):
+        for src, dst in zip(path, path[1:]):
+            if dst != chosen:
+                continue
+            rel = g.edges[src, dst].get("reltype") if g.has_edge(src, dst) else None
+            if not g.has_edge(src, new_id):
+                g.add_edge(src, new_id, reltype=rel)
+
+    def _swap(seq: list[str]) -> list[str]:
+        return [new_id if n == chosen else n for n in seq]
+
+    return new_id, _swap(path_a), _swap(path_b), _swap(node_list)
+
+
 def quality_score(
     *,
     lang_a: str,
@@ -271,12 +311,14 @@ def extract_candidates(
     limit: int | None = None,
     min_quality: int = 0,
     progress: Callable[[str, str], None] | None = None,
+    lemmas: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     leaf_langs = cfg["leaf_languages"]
     ancestor_reltypes = set(cfg["ancestor_reltypes"])
     generation_config = cfg["generate"]
     max_nodes = int(generation_config["max_nodes"])
     max_overlap = float(generation_config["max_gloss_overlap"])
+    lemmas = lemmas or {}
 
     leaves = [n for n, data in g.nodes(data=True) if data.get("lang") in leaf_langs]
     leaves.sort()
@@ -349,12 +391,22 @@ def extract_candidates(
 
         lca_lang = g.nodes[chosen]["lang"]
         lca_term = g.nodes[chosen]["term"]
+        lemma_term = canonical_lemma(lemmas, lca_lang, lca_term)
+        if lemma_term != lca_term:
+            chosen, path_a, path_b, node_list = _rewrite_form_lca(
+                g, chosen, lemma_term, path_a, path_b, node_list
+            )
+            lca_lang = g.nodes[chosen]["lang"]
+            lca_term = g.nodes[chosen]["term"]
         if not lca_term or len(lca_term) < 3:
             funnel.bump("lca_term_too_short")
             continue
         lca_gloss = gloss_for(glosses, lca_lang, lca_term)
         if not lca_gloss:
             funnel.bump("no_gloss")
+            continue
+        if is_grammatical_gloss(lca_gloss):
+            funnel.bump("inflection_lca")
             continue
 
         if leaf_shares_lca_label(term_a, gloss_a, lca_term, lca_gloss) or leaf_shares_lca_label(
@@ -526,6 +578,10 @@ def generate_puzzles(
     funnel.bump("gloss_index", len(glosses))
     timer.stage("load gloss index", f"{len(glosses)} entries")
 
+    lemmas = load_lemma_index()
+    funnel.bump("lemma_index", len(lemmas))
+    timer.stage("load lemma index", f"{len(lemmas)} entries")
+
     g = build_graph(edges, set(cfg["ancestor_reltypes"]))
     funnel.bump("graph_nodes", g.number_of_nodes())
     funnel.bump("graph_edges", g.number_of_edges())
@@ -547,6 +603,7 @@ def generate_puzzles(
         limit=extract_limit,
         min_quality=min_quality,
         progress=timer.stage if verbose else None,
+        lemmas=lemmas,
     )
     if lang_pairs:
         want = {p.lower() for p in lang_pairs}

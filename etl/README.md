@@ -18,7 +18,7 @@ uv run etl --help
 | `etl/config.yaml` | Leaf languages, ancestor allowlist, reltypes, quality thresholds, source URLs, local `database_url` |
 | `etl/fixtures/` | Tiny committed graph + glosses for tests and local iteration |
 | `data/raw/` | Downloaded parquet / JSONL, checksums, `manifest.json`, `NOTICE` (gitignored) |
-| `data/derived/` | Filtered edges, gloss index (gitignored) |
+| `data/derived/` | Filtered edges, gloss index, lemma index (gitignored) |
 | `data/puzzles/` | JSONL snapshots (gitignored) |
 | `data/reports/` | `funnel.json`, `stats.json` (gitignored) |
 
@@ -60,9 +60,9 @@ A full refresh is tens of minutes and hundreds of MB. The usual loop is `generat
 ## Pipeline stages
 
 1. **Reduce graph** — keep leaf langs English / Spanish / Portuguese / German and the ancestor allowlist in config; keep `inherited_from`, `borrowed_from`, `derived_from`, `root`, `cognate_of`, `doublet_with`; drop null related terms, multiword junk, affixes.
-2. **Index glosses** — first gloss per `(lang, term)`. Puzzles with no LCA gloss are skipped (`no_gloss`).
-3. **Extract puzzles** — two modern leaves and their closest connecting subgraph / LCA (at most 9 nodes; `too_big` otherwise), prefer cross-language via quality score, reject pairs where a leaf term or gloss is identical to the LCA term or gloss (`lca_equals_leaf`), reject pairs where both leaf terms still appear in the ancestor gloss, reject LCA terms shorter than 3 characters (`lca_term_too_short`), 4-way multiple-choice from other LCA glosses.
-4. **Ids** — SHA-256 of `(leaf_a, leaf_b, lca, gold edges)` so reruns upsert instead of duplicating. `--seed` controls sampling and choice shuffle.
+2. **Index glosses** — first *lexical* gloss per `(lang, term)` (skip `form_of` / grammatical-form senses). Form-only entries inherit the citation lemma’s gloss and are recorded in `lemma_index.json`. Puzzles with no LCA gloss are skipped (`no_gloss`).
+3. **Extract puzzles** — two modern leaves and their closest connecting subgraph / LCA (at most 9 nodes; `too_big` otherwise), prefer cross-language via quality score, rewrite form-only LCAs to the citation lemma (`Latin:addere` → `Latin:addō`), reject leftover grammatical-form glosses (`inflection_lca`), reject pairs where a leaf term or gloss is identical to the LCA term or gloss (`lca_equals_leaf`), reject pairs where both leaf terms still appear in the ancestor gloss, reject LCA terms shorter than 3 characters (`lca_term_too_short`), 4-way multiple-choice from other LCA glosses.
+4. **Ids** — SHA-256 of `(leaf_a, leaf_b, lca, gold edges)` so `etl load` upserts instead of duplicating. `generate --db` truncates first, then upserts. `--seed` controls sampling and choice shuffle.
 
 Walks toward ancestors use `inherited_from` / `borrowed_from` / `derived_from` / `root` only.
 
@@ -83,6 +83,7 @@ Same-language pairs top out at **2**, so the default `--min-quality` of **3** dr
 
 - **Proper nouns** — English / Spanish / Portuguese leaves whose term starts with an uppercase letter are skipped (`proper_noun_leaf`). German is exempt (common nouns are capitalized).
 - **Short / unglossed LCA** — LCA terms shorter than 3 characters are skipped (`lca_term_too_short`); missing LCA gloss uses existing `no_gloss`.
+- **Form-only LCA** — if the closest ancestor is only a grammatical form (infinitive, supine, inflected case, …) and Wiktionary points at a citation lemma, the gold node is replaced by that lemma and the multiple-choice answer uses the lemma’s meaning. Homographs with a real lexical sense (Latin *factum* “deed”) are left alone. Glosses that still look like `accusative … of …` are rejected (`inflection_lca`).
 - **Leaf = LCA** — if either leaf’s term or gloss equals the LCA term or gloss (case-insensitive; reconstruction `*` ignored), skip (`lca_equals_leaf`).
 - **Leaf reuse** — within one `generate` batch, each `(lang, term)` may appear as a leaf in at most one emitted puzzle (`leaf_reuse`), so `--n 10` does not repeat the same word ten times.
 - **Distractors** — multiple-choice options come from other candidates’ LCA glosses. If fewer than `n_choices - 1` distinct real glosses are available, the candidate is rejected (`insufficient_distractors`); placeholders are never emitted.
@@ -91,7 +92,7 @@ Same-language pairs top out at **2**, so the default `--min-quality` of **3** dr
 
 ### `etl refresh`
 
-Fetch etymology-db + gloss dumps into `data/raw/` if missing, verify checksums when `sha256` is set in config, write `NOTICE` + `manifest.json`, then rebuild `data/derived/` (filtered edges parquet + gloss index).
+Fetch etymology-db + gloss dumps into `data/raw/` if missing, verify checksums when `sha256` is set in config, write `NOTICE` + `manifest.json`, then rebuild `data/derived/` (filtered edges parquet + gloss index + lemma index).
 
 Does **not** wipe puzzle rows in Postgres.
 
@@ -117,7 +118,7 @@ uv run etl generate --min-quality 4
 uv run etl generate --dry-run                      # funnel only, no write
 uv run etl generate --stdout                       # JSON array on stdout
 uv run etl generate --jsonl path/to/puzzles.jsonl
-uv run etl generate --db                           # upsert into Postgres
+uv run etl generate --db                           # replace Postgres puzzles (truncates scores too)
 uv run etl generate -v --n 10                      # timed stage progress on stderr
 ```
 
@@ -140,15 +141,15 @@ If you omit every sink, output is `data/puzzles/puzzles.jsonl`. Funnel counts al
 | You want | Command |
 |---|---|
 | New JSONL (overwrite file; DB unchanged) | `etl generate` or `etl generate --jsonl PATH` |
-| New rows in Postgres (file unchanged; derived walked again) | `etl generate --db` |
-| File you already have → Postgres | `etl load PATH` (no generate) |
+| Replace Postgres puzzles (file unchanged; derived walked again; also truncates scores) | `etl generate --db` |
+| File you already have → Postgres (upsert, no truncate) | `etl load PATH` (no generate) |
 | Both a new file and DB | `etl generate --jsonl PATH` then `etl load PATH` |
 
-`--db` does not reuse `puzzles.jsonl` on purpose: that file may be a reviewed subset, a different `--n`/`--seed`, or stale vs derived. `load` is the path that trusts the file. `generate --db` is the path that trusts the graph.
+`--db` truncates `puzzles` and `scores` (FK requires both), then upserts the new batch. It does not reuse `puzzles.jsonl` on purpose: that file may be a reviewed subset, a different `--n`/`--seed`, or stale vs derived. `load` is the path that trusts the file and merges. `generate --db` is the path that trusts the graph and **replaces** table contents so rejected leftovers (for example old "inflection of ..." LCAs) disappear.
 
 With `--n > 0`, candidate search **early-exits** once enough quality survivors are found (and only walks leaf pairs that share an ancestor). Use `--n 0` for a full pass. Early exit can change which top-N puzzles you get versus an exhaustive quality sort over every pair.
 
-Rejection reasons in the funnel include `no_gloss`, `lca_term_too_short`, `lca_equals_leaf`, `too_big`, `same_meaning`, `no_lca`, `proper_noun_leaf`, `below_min_quality`, `leaf_reuse`, `insufficient_distractors`, `early_exit`.
+Rejection reasons in the funnel include `no_gloss`, `lca_term_too_short`, `inflection_lca`, `lca_equals_leaf`, `too_big`, `same_meaning`, `no_lca`, `proper_noun_leaf`, `below_min_quality`, `leaf_reuse`, `insufficient_distractors`, `early_exit`.
 
 ### `etl reset`
 
@@ -224,7 +225,7 @@ Exit code `1` if any puzzle fails.
 
 ### `etl load PATH`
 
-Validate a JSONL file and upsert it into Postgres **without** walking the graph or changing the file. This is how you reuse an existing `puzzles.jsonl` (or a snapshot someone else generated). `etl generate --db` will not do that.
+Validate a JSONL file and upsert it into Postgres **without** walking the graph, truncating, or changing the file. This is how you reuse an existing `puzzles.jsonl` (or a snapshot someone else generated). `etl generate --db` instead replaces the puzzles table from a fresh graph walk.
 
 ```bash
 uv run etl load data/puzzles/puzzles.jsonl
@@ -258,9 +259,9 @@ docker compose up db -d
 # ETL reads database_url from etl/config.yaml (override with DATABASE_URL if needed)
 (cd backend && DATABASE_URL=postgres://etymoguessr:etymoguessr@localhost:5432/etymoguessr?sslmode=disable go run ./cmd/api)
 uv run etl doctor
-# already have puzzles.jsonl? load it — do not generate --db (that re-walks the graph)
+# already have puzzles.jsonl? load it — do not generate --db (that re-walks the graph and replaces DB rows)
 uv run etl load data/puzzles/puzzles.jsonl
-# or extract again from derived into Postgres only:
+# or extract again from derived into Postgres only (truncates puzzles + scores first):
 # uv run etl generate --db --n 50 --seed 1
 uv run etl inspect --db --random
 uv run etl disable <id>          # if a row looks wrong
