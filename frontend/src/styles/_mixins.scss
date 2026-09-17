@@ -41,22 +41,14 @@
 
 @mixin graph-viewport {
   width: 100%;
-  height: min(34rem, 62vh);
-  min-height: 20rem;
-
-  @include bp.mobile {
-    height: min(22rem, 52vh);
-    min-height: 16rem;
-  }
+  height: 54vh;
 }
 
 // Type
 
-@mixin mono-kicker(
-  $tracking: 0.12em,
+@mixin mono-kicker($tracking: 0.12em,
   $color: var(--ink-faint),
-  $size: var(--text-xs)
-) {
+  $size: var(--text-xs)) {
   margin: 0;
   font-family: var(--font-mono);
   font-size: $size;
@@ -91,11 +83,9 @@
   cursor: pointer;
 }
 
-@mixin ink-underline(
-  $size: var(--text-sm),
+@mixin ink-underline($size: var(--text-sm),
   $tracking: 0.06em,
-  $color: var(--ink-muted)
-) {
+  $color: var(--ink-muted)) {
   @include unstyled-button;
   font-family: var(--font-mono);
   font-size: $size;
