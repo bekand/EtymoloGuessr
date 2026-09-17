@@ -5,9 +5,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/bekand/EtymoGuessr/backend/internal/db"
-	"github.com/bekand/EtymoGuessr/backend/internal/dbtest"
-	"github.com/bekand/EtymoGuessr/backend/internal/puzzle"
+	"github.com/bekand/EtymoloGuessr/backend/internal/db"
+	"github.com/bekand/EtymoloGuessr/backend/internal/dbtest"
+	"github.com/bekand/EtymoloGuessr/backend/internal/puzzle"
 )
 
 func TestStoreRandomAndGet(t *testing.T) {

@@ -1,4 +1,4 @@
-# EtymoGuessr API
+# EtymoloGuessr API
 
 Go HTTP service that serves pregenerated etymology puzzles from Postgres. It does not walk the Wiktionary graph: Python ETL writes rows, this process picks one, hides the answer, and grades a submission.
 
@@ -109,7 +109,7 @@ Needs Go 1.24+ and Postgres 16.
 # from repo root
 docker compose up db -d
 
-export DATABASE_URL=postgres://etymoguessr:etymoguessr@localhost:5432/etymoguessr?sslmode=disable
+export DATABASE_URL=postgres://etymologuessr:etymologuessr@localhost:5432/etymologuessr?sslmode=disable
 export CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 
 cd backend

@@ -7,8 +7,8 @@ export const puzzleKeys = {
 }
 
 const LOCK_KEYS: Record<PuzzleMode, string> = {
-  easy: 'etymoguessr:easy-puzzle',
-  hard: 'etymoguessr:hard-puzzle',
+  easy: 'etymologuessr:easy-puzzle',
+  hard: 'etymologuessr:hard-puzzle',
 }
 
 export function isPuzzleNotFound(error: unknown): boolean {

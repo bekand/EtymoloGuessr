@@ -53,6 +53,7 @@ describe('EasyMode', () => {
     render(<EasyMode />, { wrapper })
 
     expect(await screen.findByRole('article', { name: 'father' })).toBeInTheDocument()
+    expect(screen.getByText('EtymoloGuessr')).toBeInTheDocument()
     expect(screen.getByRole('article', { name: 'Vater' })).toBeInTheDocument()
     const choices = screen.getAllByRole('button', { name: /^Choice / })
     expect(choices).toHaveLength(4)

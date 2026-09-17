@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/bekand/EtymoGuessr/backend/internal/puzzle"
+	"github.com/bekand/EtymoloGuessr/backend/internal/puzzle"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )

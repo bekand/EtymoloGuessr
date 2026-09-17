@@ -2,8 +2,8 @@ import { useCallback, useState } from 'react'
 import type { PuzzleMode } from '@/api/types'
 
 const STREAK_KEYS: Record<PuzzleMode, string> = {
-  easy: 'etymoguessr:easy-streak',
-  hard: 'etymoguessr:hard-streak',
+  easy: 'etymologuessr:easy-streak',
+  hard: 'etymologuessr:hard-streak',
 }
 
 function parseStreak(raw: string | null): number {

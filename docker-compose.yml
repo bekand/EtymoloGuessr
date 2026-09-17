@@ -1,16 +1,18 @@
+name: etymologuessr
+
 services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: etymoguessr
-      POSTGRES_PASSWORD: etymoguessr
-      POSTGRES_DB: etymoguessr
+      POSTGRES_USER: etymologuessr
+      POSTGRES_PASSWORD: etymologuessr
+      POSTGRES_DB: etymologuessr
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U etymoguessr -d etymoguessr"]
+      test: ["CMD-SHELL", "pg_isready -U etymologuessr -d etymologuessr"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -22,7 +24,7 @@ services:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgres://etymoguessr:etymoguessr@db:5432/etymoguessr?sslmode=disable
+      DATABASE_URL: postgres://etymologuessr:etymologuessr@db:5432/etymologuessr?sslmode=disable
       HTTP_ADDR: :8080
       CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
       AUTO_MIGRATE: "true"

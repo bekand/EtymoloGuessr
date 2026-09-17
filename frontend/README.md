@@ -1,6 +1,6 @@
-# EtymoGuessr frontend
+# EtymoloGuessr frontend
 
-React + TypeScript + Vite UI for EtymoGuessr. Paper/ink design tokens, primitives, and playable Easy and Hard modes on React Router (`/`, `/easy`, `/hard`).
+React + TypeScript + Vite UI for EtymoloGuessr. Paper/ink design tokens, primitives, and playable Easy and Hard modes on React Router (`/`, `/easy`, `/hard`).
 
 Easy is two modern words and a four-way meaning choice; Hard is a graph editor. Both talk to the Go API, then share a read-only etymology graph after submit.
 

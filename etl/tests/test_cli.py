@@ -208,3 +208,8 @@ def test_database_url_env_wins_over_broken_config(monkeypatch: pytest.MonkeyPatc
     from etl.paths import database_url
 
     assert database_url() == "postgres://from-env"
+
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("ETL_CONFIG", raising=False)
+    url = database_url()
+    assert url and "etymologuessr" in url

@@ -9,7 +9,7 @@ export function HomeScreen() {
     <main className="homeScreen">
       <div className="atmosphere" aria-hidden="true" />
       <Sheet as="section" tone="paper">
-        <p className="brand">EtymoGuessr</p>
+        <p className="brand">EtymoloGuessr</p>
         <h1 className="headline">Trace two words to one ancestor.</h1>
         <div className="actions">
           <Stamp size="lg" tone="green" onClick={() => navigate('/easy')} aria-label="Play Easy mode">

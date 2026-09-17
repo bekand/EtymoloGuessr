@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bekand/EtymoGuessr/backend/internal/config"
-	"github.com/bekand/EtymoGuessr/backend/internal/puzzle"
+	"github.com/bekand/EtymoloGuessr/backend/internal/config"
+	"github.com/bekand/EtymoloGuessr/backend/internal/puzzle"
 )
 
 type memStore struct {

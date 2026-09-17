@@ -258,7 +258,7 @@ After Postgres exists (API applies migrations on startup):
 ```bash
 docker compose up db -d
 # ETL reads database_url from etl/config.yaml (override with DATABASE_URL if needed)
-(cd backend && DATABASE_URL=postgres://etymoguessr:etymoguessr@localhost:5432/etymoguessr?sslmode=disable go run ./cmd/api)
+(cd backend && DATABASE_URL=postgres://etymologuessr:etymologuessr@localhost:5432/etymologuessr?sslmode=disable go run ./cmd/api)
 uv run etl doctor
 # already have puzzles.jsonl? load it — do not generate --db (that re-walks the graph and replaces DB rows)
 uv run etl load data/puzzles/puzzles.jsonl

@@ -36,7 +36,7 @@ import '@/ui/graph/EtymologyGraph.scss'
 const nodeTypes = { etymology: EtymologyNode }
 const edgeTypes = { ink: InkEdge }
 const PALETTE_TONES = ['yellow', 'pink', 'blue', 'green'] as const
-const NODE_MIME = 'application/etymoguessr-node'
+const NODE_MIME = 'application/etymologuessr-node'
 
 const inkMarker = {
   type: MarkerType.ArrowClosed,

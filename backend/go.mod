@@ -1,4 +1,4 @@
-module github.com/bekand/EtymoGuessr/backend
+module github.com/bekand/EtymoloGuessr/backend
 
 go 1.24.0
 

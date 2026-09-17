@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/bekand/EtymoGuessr/backend/internal/config"
-	"github.com/bekand/EtymoGuessr/backend/internal/puzzle"
+	"github.com/bekand/EtymoloGuessr/backend/internal/config"
+	"github.com/bekand/EtymoloGuessr/backend/internal/puzzle"
 )
 
 const minHardModeNodes = 4

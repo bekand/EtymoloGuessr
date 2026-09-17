@@ -9,6 +9,7 @@ test('easy mode plays a round without leaking gold on GET', async ({ page }) => 
   )
 
   await page.goto('/')
+  await expect(page.getByText('EtymoloGuessr')).toBeVisible()
   await page.getByRole('button', { name: 'Play Easy mode' }).click()
 
   const response = await random

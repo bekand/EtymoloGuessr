@@ -8,7 +8,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../
 const apiOrigin = process.env.E2E_API_URL ?? 'http://localhost:18080'
 const databaseUrl =
   process.env.TEST_DATABASE_URL ??
-  'postgres://etymoguessr:etymoguessr@localhost:5433/etymoguessr?sslmode=disable'
+  'postgres://etymologuessr:etymologuessr@localhost:5433/etymologuessr?sslmode=disable'
 
 async function waitForHealth() {
   const deadline = Date.now() + 60_000
@@ -29,7 +29,7 @@ async function waitForHealth() {
 }
 
 function loadFixtures() {
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'etymoguessr-e2e-'))
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'etymologuessr-e2e-'))
   const python = path.join(repoRoot, '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python')
   const exe = fs.existsSync(python) ? python : 'python'
   execFileSync(exe, ['-m', 'etl', 'reset', '--all', '--reload', '--fixtures'], {

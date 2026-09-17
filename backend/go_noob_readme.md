@@ -22,19 +22,19 @@ There is no interpreter at runtime and no GIL. `go run ./cmd/api` compiles, then
 `go.mod` starts with:
 
 ```
-module github.com/bekand/EtymoGuessr/backend
+module github.com/bekand/EtymoloGuessr/backend
 go 1.24.0
 ```
 
 The module path is the prefix of every import:
 
 ```go
-import "github.com/bekand/EtymoGuessr/backend/internal/puzzle"
+import "github.com/bekand/EtymoloGuessr/backend/internal/puzzle"
 ```
 
 A **package** is a directory of `.go` files that share a `package name` line. All files in `internal/puzzle/` are `package puzzle`. You import the *directory path*, then use the *package name*: `puzzle.PromptGraph(...)`.
 
-**`internal/` is enforced by the compiler.** Another module cannot import `github.com/bekand/EtymoGuessr/backend/internal/...`. Only this module can. That is why HTTP, DB, and scoring live there: they are not a public library.
+**`internal/` is enforced by the compiler.** Another module cannot import `github.com/bekand/EtymoloGuessr/backend/internal/...`. Only this module can. That is why HTTP, DB, and scoring live there: they are not a public library.
 
 **`cmd/api` is `package main`.** Only `main` packages produce executables, and they must have `func main()`. Library packages (`puzzle`, `db`, `api`) have no `main`.
 

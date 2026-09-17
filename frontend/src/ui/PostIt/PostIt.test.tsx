@@ -49,13 +49,15 @@ describe('PostIt', () => {
     const gap = 0.75 * rem
     // PostIt.scss hover `translateY(-1px)`
     const hoverLift = 1
-    // EasyMode.scss column cap `15.75rem`; HardMode.scss palette/notes cap `16rem`
+    // EasyMode.scss column cap `15.75rem`; HardMode.scss desktop notes cap `16rem`
     const easyWidth = 15.75 * rem
     const hardWidth = 16 * rem
+    // HardMode.scss below-desktop 2-col, page gutters: (64rem - 0.0625rem - 2 * 2.5rem - 0.75rem) / 2
+    const hardBelowDesktopWidth = ((64 - 0.0625 - 5 - 0.75) / 2) * rem
     // PostIt.scss: space-5 + space-4 padding and 6-line body at text-base / 1.4
     const maxHeight = (1.5 + 1 + 6 * 1.0625 * 1.4) * rem + 2
 
-    for (const width of [easyWidth, hardWidth]) {
+    for (const width of [easyWidth, hardWidth, hardBelowDesktopWidth]) {
       const { dx, dy } = aabbProtrusion(width, maxHeight, POST_IT_MAX_TILT_DEG)
       expect(2 * dx).toBeLessThan(gap)
       expect(2 * dy + hoverLift).toBeLessThan(gap)

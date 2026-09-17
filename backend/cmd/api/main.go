@@ -9,9 +9,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/bekand/EtymoGuessr/backend/internal/api"
-	"github.com/bekand/EtymoGuessr/backend/internal/config"
-	"github.com/bekand/EtymoGuessr/backend/internal/db"
+	"github.com/bekand/EtymoloGuessr/backend/internal/api"
+	"github.com/bekand/EtymoloGuessr/backend/internal/config"
+	"github.com/bekand/EtymoloGuessr/backend/internal/db"
 )
 
 func main() {

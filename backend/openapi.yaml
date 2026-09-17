@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: EtymoGuessr API
+  title: EtymoloGuessr API
   version: 0.1.0
   description: Thin JSON layer over pregenerated etymology puzzles. Gold answers are never returned on GET.
 servers:

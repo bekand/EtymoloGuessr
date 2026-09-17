@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bekand/EtymoGuessr/backend/internal/config"
-	"github.com/bekand/EtymoGuessr/backend/internal/db"
-	"github.com/bekand/EtymoGuessr/backend/internal/dbtest"
+	"github.com/bekand/EtymoloGuessr/backend/internal/config"
+	"github.com/bekand/EtymoloGuessr/backend/internal/db"
+	"github.com/bekand/EtymoloGuessr/backend/internal/dbtest"
 )
 
 func TestHealthAndSolveAgainstPostgres(t *testing.T) {

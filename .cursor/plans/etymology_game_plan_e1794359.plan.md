@@ -1,6 +1,6 @@
 ---
 name: Etymology game plan
-overview: "EtymoGuessr v1 is playable locally: Python ETL, Go API + Postgres, React paper/ink UI (Easy MC + Hard graph editor), including the gloss-aligned homograph allowlist. Next goal is Railway (Vite/Caddy SPA + Go API, JSONL in-process, no hosted Postgres)."
+overview: "EtymoloGuessr v1 is playable locally: Python ETL, Go API + Postgres, React paper/ink UI (Easy MC + Hard graph editor), including the gloss-aligned homograph allowlist. Next goal is Railway (Vite/Caddy SPA + Go API, JSONL in-process, no hosted Postgres)."
 todos:
   - id: etl-cli
     content: "Python Typer CLI: refresh, generate (--n, stdout/jsonl/db), reset, doctor, stats, inspect, validate, load, disable"
@@ -44,7 +44,7 @@ todos:
 isProject: false
 ---
 
-# EtymoGuessr
+# EtymoloGuessr
 
 **Status:** v1 is playable locally, including the gloss-aligned homograph allowlist. Python ETL writes puzzle rows (JSONL and/or Postgres), a Go API serves one at a time (hiding the answer until submit), and a React UI plays Easy and Hard. Last full generate emitted ~3,678 quality-4 puzzles ([`data/reports/funnel.json`](data/reports/funnel.json)). Frontend is still Vite-only (not in Compose). Next goal is **cloud-deployable on Railway**. This plan is the product/architecture source of truth; layer READMEs hold commands.
 

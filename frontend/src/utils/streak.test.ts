@@ -6,7 +6,7 @@ describe('streak', () => {
     expect(readStreak('easy')).toBe(0)
     expect(readStreak('hard')).toBe(0)
 
-    localStorage.setItem('etymoguessr:easy-streak', 'nope')
+    localStorage.setItem('etymologuessr:easy-streak', 'nope')
     expect(readStreak('easy')).toBe(0)
 
     expect(recordStreakResult('easy', true)).toBe(1)

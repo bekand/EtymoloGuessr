@@ -1,4 +1,4 @@
-# EtymoGuessr
+# EtymoloGuessr
 
 A guessing game about etymology. You are shown two modern words (English, Spanish, Portuguese, or German) that share an ancestor, and you try to recover that connection.
 
@@ -74,7 +74,7 @@ pnpm dev
 
 Open the URL Vite prints (usually `http://localhost:5173`). The UI proxies `/api` to the Go service on port 8080.
 
-Postgres is on `localhost:5432` (`etymoguessr` / `etymoguessr`). To stop the containers: `docker compose down`.
+Postgres is on `localhost:5432` (`etymologuessr` / `etymologuessr`). To stop the containers: `docker compose down`.
 
 ## Tests
 
@@ -90,7 +90,7 @@ Integration and browser tests use a throwaway stack so they never truncate the p
 
 ```bash
 docker compose -f docker-compose.test.yml up -d --wait --build
-export TEST_DATABASE_URL=postgres://etymoguessr:etymoguessr@localhost:5433/etymoguessr?sslmode=disable
+export TEST_DATABASE_URL=postgres://etymologuessr:etymologuessr@localhost:5433/etymologuessr?sslmode=disable
 uv run pytest -m integration
 cd backend && TEST_DATABASE_URL=$TEST_DATABASE_URL go test -p 1 ./...
 cd frontend && pnpm exec playwright install chromium && pnpm test:e2e

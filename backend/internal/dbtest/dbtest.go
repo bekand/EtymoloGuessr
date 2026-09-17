@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bekand/EtymoGuessr/backend/internal/db"
-	"github.com/bekand/EtymoGuessr/backend/internal/puzzle"
+	"github.com/bekand/EtymoloGuessr/backend/internal/db"
+	"github.com/bekand/EtymoloGuessr/backend/internal/puzzle"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
