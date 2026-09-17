@@ -63,6 +63,18 @@ Only `enabled = true` rows. `404` if none match.
 
 `choices` are always sent (unmarked). Hard UI can ignore them.
 
+### `GET /puzzles/{id}`
+
+Query:
+
+| Param | Default | Notes |
+|---|---|---|
+| `mode` | `easy` | `easy` or `hard` |
+
+Same prompt as random for that id: Easy omits `promptGraph`; Hard sends all nodes, ancestor gloss stripped, empty edges. Never `correctChoice` or gold edges.
+
+The UI lock re-fetches this after refresh. `404` if the puzzle is missing, disabled, or not eligible for the mode (Hard needs ≥ 4 nodes) — that clears a lock when `generate --db` replaced the table. Invalid `mode` → `400`.
+
 ### `POST /puzzles/{id}/solve`
 
 Disabled or missing ids → `404`. Body:
@@ -118,6 +130,7 @@ Smoke:
 ```bash
 curl -s http://localhost:8080/health
 curl -s 'http://localhost:8080/puzzles/random?mode=easy'
+curl -s "http://localhost:8080/puzzles/${ID}?mode=easy"
 ```
 
 ### Docker (API + Postgres)

@@ -1,8 +1,8 @@
 # EtymoGuessr frontend
 
-React + TypeScript + Vite UI for EtymoGuessr. Paper/ink design tokens, primitives, a playable Easy mode, and a Hard stub.
+React + TypeScript + Vite UI for EtymoGuessr. Paper/ink design tokens, primitives, and playable Easy and Hard modes on React Router (`/`, `/easy`, `/hard`).
 
-Easy talks to the Go API: random prompt, submit a meaning, then a read-only etymology graph. Hard is still a coming-soon screen.
+Easy is two modern words and a four-way meaning choice; Hard is a graph editor. Both talk to the Go API, then share a read-only etymology graph after submit.
 
 ## Stack
 
@@ -11,8 +11,8 @@ Easy talks to the Go API: random prompt, submit a meaning, then a read-only etym
 - Sass (SCSS) + CSS variables (no Tailwind)
 - IBM Plex Mono + Serif (`@fontsource`)
 - TanStack Query for puzzle fetch / solve
-- React Flow (`@xyflow/react`) for the post-submit graph
-- Screen navigation via React state (`home` / `easy` / `hard`) — no react-router
+- React Flow (`@xyflow/react`) for the Hard blotter and the post-submit graph
+- React Router (`/`, `/easy`, `/hard`)
 
 ## Scripts
 
@@ -36,26 +36,35 @@ Dev expects the API at `http://localhost:8080`. The client calls `/puzzles/...`;
 
 ```
 src/
-  api/             # fetch helper, puzzle types, random/solve + easy lock
+  api/             # fetch helper, puzzle types, random/by-id/solve + per-mode lock
   query/           # QueryClient
   styles/          # tokens + global Sass
   utils/           # seeded shuffle (choice order + post-it colors)
   ui/              # Sheet, IndexCard, PostIt, InkButton, Stamp, Colophon
-    graph/         # read-only EtymologyGraph (custom nodes + ink edges)
+    graph/         # EtymologyGraph, EtymologyNode, InkEdge
   features/
-    home/          # Home sheet + Easy / Hard entry
+    home/          # Home sheet + Easy / Hard stamps
     easy/          # live MC puzzle + graph reveal
-    hard/          # coming-soon stub
+    hard/          # HardMode + HardCanvas (palette, place, connect)
+    feedback/      # shared verdict + gold graph
 ```
 
 ## Easy mode
 
-1. `GET /puzzles/random?mode=easy` — two index cards, four meaning post-its.
-2. The current prompt is locked in `localStorage` so refresh does not swap the puzzle.
-3. Choice order and post-it colors are shuffled from the first digit in the puzzle id.
-4. `POST /puzzles/{id}/solve` — cards and post-its hide; verdict + `goldGraph` (React Flow, relation labels on edges).
+1. `GET /puzzles/random?mode=easy` — two index cards, four meaning post-its. Index cards have an Explain control for the leaf gloss.
+2. The current prompt is locked in `localStorage` so refresh does not swap the puzzle. On reload the client re-fetches `GET /puzzles/{id}?mode=easy`; **404** clears the lock (the row may be gone after `generate --db`).
+3. Choice order and post-it colors are shuffled from the puzzle id.
+4. `POST /puzzles/{id}/solve` — cards and post-its hide; `FeedbackScreen` shows the verdict + `goldGraph` (React Flow, relation labels on edges).
 5. Next clears the lock and fetches another prompt.
+
+## Hard mode
+
+1. `GET /puzzles/random?mode=hard` — only puzzles with **≥ 4 graph nodes**. `promptGraph` has every gold node, ancestor gloss stripped, `edges: []`. Terms stay so known ancestor cards can be placed. The UI ignores `choices`.
+2. Same per-mode `localStorage` lock as Easy: reload re-fetches `GET /puzzles/{id}?mode=hard`; **404** clears the lock.
+3. **No nodes start on the blotter** — leaves and ancestors sit in a post-it palette. Place every card (click or drag), then draw directed edges **child → ancestor**. Player edges have no relation-type labels.
+4. Submit is disabled until every node is placed (hint: “Build the graph!”). Score is an exact directed edge-set match (ignore order and `reltype`).
+5. After submit, the same `FeedbackScreen` as Easy: verdict + read-only gold graph with relation labels.
 
 ## Design notes
 
-Light paper sheets, darker ink, low-sat post-its, rectangular stamp actions. Attribution colophon (CC BY-SA / Wiktionary + etymology-db) on every screen. Hard entry is disabled until that mode ships.
+Light paper sheets, darker ink, low-sat post-its, rectangular stamp actions. No dark theme. Language is an ink stamp on a card (`EN`, `DE`), not a color-coded rainbow. Attribution colophon (CC BY-SA / Wiktionary + etymology-db) on every screen. Home Easy / Hard stamps are both live.

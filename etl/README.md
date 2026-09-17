@@ -78,7 +78,7 @@ Integer 0-5, stored on each puzzle. Start at 5, then:
 | LCA is a modern leaf language (EN/ES/PT/DE) | -1 |
 | High overlap (either leaf term still appears in the LCA gloss) | -1 |
 
-Same-language pairs top out at **2**, so the default `--min-quality` of **3** drops them. Default is config `generate.min_quality` (currently 3).
+Same-language pairs top out at **2**, so the default `--min-quality` of **4** drops them. Default is config `generate.min_quality` (currently 4).
 
 ### Leaf filters and batch diversity
 
@@ -127,10 +127,10 @@ Flags:
 
 | Flag | Meaning |
 |---|---|
-| `--n N` | Max puzzles. Default from `config.yaml` (`generate.n`, currently 50). `0` = emit every survivor |
+| `--n N` | Max puzzles. Default from `config.yaml` (`generate.n`, currently 0). `0` = emit every survivor |
 | `--seed` | Sampling and choice shuffle (default `generate.seed`) |
 | `--lang-pair` | Repeatable filter, codes like `en-de` (sorted alphabetically) |
-| `--min-quality` | Drop candidates below this integer score (default `generate.min_quality`, currently 3) |
+| `--min-quality` | Drop candidates below this integer score (default `generate.min_quality`, currently 4) |
 | `--stdout` / `--jsonl PATH` / `--db` | Mutually exclusive sinks |
 | `--dry-run` | Print counts / write `data/reports/funnel.json` only |
 | `--verbose` / `-v` | Timed stage progress on stderr (load derived, build graph, candidates, emit, write). Also accepted as `etl -v generate …` |

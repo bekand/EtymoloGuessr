@@ -40,8 +40,40 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PuzzlePrompt"
+        "400":
+          description: Invalid mode
         "404":
           description: No enabled puzzles match the filter
+  /puzzles/{id}:
+    get:
+      summary: Fetch a puzzle prompt by id
+      description: >
+        Used by the UI puzzle lock to re-fetch after refresh. Same prompt
+        contract as GET /puzzles/random (never gold or correctChoice).
+        404 clears a lock if generate --db deleted the row.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: mode
+          schema:
+            type: string
+            enum: [easy, hard]
+            default: easy
+      responses:
+        "200":
+          description: Prompt without correctChoice or gold edges
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PuzzlePrompt"
+        "400":
+          description: Invalid mode
+        "404":
+          description: Puzzle missing, disabled, or not eligible for the mode (hard requires at least 4 nodes)
   /puzzles/{id}/solve:
     post:
       summary: Score a submission and reveal gold
