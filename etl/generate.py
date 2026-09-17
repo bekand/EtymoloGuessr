@@ -372,10 +372,9 @@ def _iter_related_leaf_pairs(
     ancestor_order: list[str] = []
     for fan in sorted(fanout_groups.keys(), reverse=True):
         chunk = fanout_groups[fan]
+        chunk.sort()
         if rng is not None:
             rng.shuffle(chunk)
-        else:
-            chunk.sort()
         ancestor_order.extend(chunk)
 
     seen_pairs: set[tuple[str, str]] = set()
@@ -393,9 +392,11 @@ def _iter_related_leaf_pairs(
         return
 
     # Cursor per ancestor: (shuffled group, i, j). Round-robin one pair each.
+    # Sort before shuffle so a seeded rng is independent of PYTHONHASHSEED
+    # (list(set(...)) order is randomized per process).
     cursors: list[list[Any]] = []
     for anc in ancestor_order:
-        group = list(set(by_ancestor[anc]))
+        group = sorted(set(by_ancestor[anc]))
         if len(group) < 2:
             continue
         rng.shuffle(group)

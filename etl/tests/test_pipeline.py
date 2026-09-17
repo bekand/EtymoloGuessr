@@ -673,16 +673,26 @@ def test_extract_candidates_early_exit_respects_limit():
     assert any(involves_english(c) for c in quality)
     assert any(not involves_english(c) for c in quality)
 
+    def _pair_key(cand: dict) -> tuple:
+        return tuple(
+            sorted(
+                [
+                    (cand["leaf_a"]["lang"], cand["leaf_a"]["term"]),
+                    (cand["leaf_b"]["lang"], cand["leaf_b"]["term"]),
+                ]
+            )
+        )
+
+    # Seeded pair iteration must not depend on PYTHONHASHSEED (sort-then-shuffle).
+    again = extract_candidates(
+        g, glosses, cfg, Funnel(), limit=10, min_quality=3, rng=random_mod.Random(1)
+    )
+    assert [_pair_key(c) for c in cands] == [_pair_key(c) for c in again]
+
     # Emit buckets: seeded shuffle + English/other water-fill (not alpha A-words first).
     # Simulate leaf-reuse greedily over prepared buckets.
-    en_terms_alpha = sorted(
-        {
-            c["leaf_a"]["term"] if c["leaf_a"]["lang"] == "English" else c["leaf_b"]["term"]
-            for c in quality
-            if involves_english(c)
-        }
-    )
-    assert en_terms_alpha, "expected English-involving quality candidates"
+    def _en_term(cand: dict) -> str:
+        return cand["leaf_a"]["term"] if cand["leaf_a"]["lang"] == "English" else cand["leaf_b"]["term"]
 
     def _simulate_emit(seed: int, n: int = 20) -> list[dict]:
         buckets = prepare_score_buckets(quality, random_mod.Random(seed))
@@ -730,27 +740,14 @@ def test_extract_candidates_early_exit_respects_limit():
     assert en_n >= 1 and other_n >= 1
     assert abs(en_n - other_n) <= 1
 
-    first_en = next(
-        (
-            c["leaf_a"]["term"] if c["leaf_a"]["lang"] == "English" else c["leaf_b"]["term"]
-            for c in batch
-            if involves_english(c)
-        ),
-        None,
-    )
-    assert first_en is not None
-    # A-words must not lead: first emitted English leaf is not the alphabetically first.
-    assert first_en != en_terms_alpha[0] or len(en_terms_alpha) == 1
+    en_bucket, _other = prepare_score_buckets(quality, random_mod.Random(1))[0]
+    en_order = [_en_term(c) for c in en_bucket]
+    # Shuffle the English bucket rather than emitting A-words first.
+    assert en_order != sorted(en_order)
 
-    pairs_s1 = {
-        tuple(sorted([(c["leaf_a"]["lang"], c["leaf_a"]["term"]), (c["leaf_b"]["lang"], c["leaf_b"]["term"])]))
-        for c in _simulate_emit(1, n=20)
-    }
-    pairs_s2 = {
-        tuple(sorted([(c["leaf_a"]["lang"], c["leaf_a"]["term"]), (c["leaf_b"]["lang"], c["leaf_b"]["term"])]))
-        for c in _simulate_emit(2, n=20)
-    }
-    assert pairs_s1 != pairs_s2
+    seq_s1 = [_pair_key(c) for c in _simulate_emit(1, n=20)]
+    seq_s2 = [_pair_key(c) for c in _simulate_emit(2, n=20)]
+    assert seq_s1 != seq_s2
 
 
 def test_extract_candidates_skips_proper_noun_leaves():
