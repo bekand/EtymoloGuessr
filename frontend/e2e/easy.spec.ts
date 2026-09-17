@@ -16,6 +16,7 @@ test('easy mode plays a round without leaking gold on GET', async ({ page }) => 
   expect(body.correctChoice).toBeUndefined()
 
   await expect(page.getByLabel('Word pair')).toBeVisible()
+  await expect(page.getByText(/Easy\s+\[ Streak 0 \]/)).toBeVisible()
   await expect(page.getByLabel('Meaning choices').getByRole('button')).toHaveCount(4)
 
   await page.getByLabel('Meaning choices').getByRole('button').first().click()

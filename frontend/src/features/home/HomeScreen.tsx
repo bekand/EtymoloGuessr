@@ -21,7 +21,7 @@ export function HomeScreen() {
           </Stamp>
         </div>
         <p className="note">
-          Easy: pick the shared ancestor meaning. Hard: place every word and draw the ink.
+          Easy: pick the shared ancestor meaning. <br /> Hard: place every word and draw the family tree.
         </p>
       </Sheet>
       <Colophon />

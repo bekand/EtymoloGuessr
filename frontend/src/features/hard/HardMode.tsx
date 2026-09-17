@@ -1,6 +1,5 @@
 import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
 import {
   clearHardPuzzleLock,
   fetchLockedRandomHard,
@@ -9,7 +8,8 @@ import {
   solveHardPuzzle,
 } from '@/api/puzzles'
 import type { GraphEdge, PuzzlePrompt } from '@/api/types'
-import { Colophon, InkButton, Sheet, Stamp } from '@/ui'
+import { Colophon, PlayHeader, Sheet, Stamp } from '@/ui'
+import { useStreak } from '@/utils/streak'
 import { FeedbackScreen } from '../feedback/FeedbackScreen'
 import { HardCanvas, type HardCanvasHandle } from './HardCanvas'
 import './HardMode.scss'
@@ -25,15 +25,16 @@ const randomHardQuery = {
 } as const
 
 export function HardMode() {
-  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const canvasRef = useRef<HardCanvasHandle>(null)
   const [gradedPuzzle, setGradedPuzzle] = useState<PuzzlePrompt>()
   const [allPlaced, setAllPlaced] = useState(false)
+  const { streak, recordResult } = useStreak('hard')
 
   const solveMutation = useMutation({
     mutationFn: ({ id, edges }: { id: string; edges: GraphEdge[] }) => solveHardPuzzle(id, edges),
-    onSuccess: () => {
+    onSuccess: (result) => {
+      recordResult(result.correct)
       clearHardPuzzleLock()
       queryClient.removeQueries({ queryKey: puzzleKeys.randomHard })
     },
@@ -80,14 +81,8 @@ export function HardMode() {
   }
 
   return (
-    <Sheet as="main" tone="kraft" className="hardMode">
-      <header className="header">
-        <InkButton variant="ghost" onClick={() => navigate('/')}>
-          ← Home
-        </InkButton>
-        <p className="brand">EtymoGuessr</p>
-        <p className="mode">Hard</p>
-      </header>
+    <Sheet as="main" tone="paper" className="hardMode">
+      <PlayHeader mode="hard" streak={streak} />
 
       {revealing ? null : (
         <p className="instruction">

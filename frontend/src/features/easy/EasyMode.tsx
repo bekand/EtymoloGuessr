@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
 import {
   clearEasyPuzzleLock,
   fetchLockedRandomEasy,
@@ -9,8 +8,9 @@ import {
   solveEasyPuzzle,
 } from '@/api/puzzles'
 import type { PuzzlePrompt } from '@/api/types'
-import { Colophon, IndexCard, InkButton, PostIt, Sheet, Stamp } from '@/ui'
+import { Colophon, IndexCard, PlayHeader, PostIt, Sheet, Stamp } from '@/ui'
 import { shuffle } from '@/utils/shuffle'
+import { useStreak } from '@/utils/streak'
 import { FeedbackScreen } from '../feedback/FeedbackScreen'
 import './EasyMode.scss'
 
@@ -28,16 +28,17 @@ const randomEasyQuery = {
 } as const
 
 export function EasyMode() {
-  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [gradedPuzzle, setGradedPuzzle] = useState<PuzzlePrompt>()
   const [explainOpen, setExplainOpen] = useState<'left' | 'right' | null>(null)
+  const { streak, recordResult } = useStreak('easy')
 
   const solveMutation = useMutation({
     mutationFn: ({ id, choiceId }: { id: string; choiceId: string }) =>
       solveEasyPuzzle(id, choiceId),
-    onSuccess: () => {
+    onSuccess: (result) => {
+      recordResult(result.correct)
       clearEasyPuzzleLock()
       queryClient.removeQueries({ queryKey: puzzleKeys.randomEasy })
     },
@@ -188,14 +189,8 @@ export function EasyMode() {
   }
 
   return (
-    <Sheet as="main" tone="paper" className="easyMode">
-      <header className="header">
-        <InkButton variant="ghost" onClick={() => navigate('/')}>
-          ← Home
-        </InkButton>
-        <p className="brand">EtymoGuessr</p>
-        <p className="mode">Easy</p>
-      </header>
+    <Sheet as="main" tone="blotter" className="easyMode">
+      <PlayHeader mode="easy" streak={streak} />
 
       {revealing ? null : renderPrompt()}
 

@@ -20,39 +20,6 @@
   padding: var(--page-gutter);
   animation: easy-mode-settle var(--duration-med) var(--ease-paper) both;
 
-  .header {
-    display: grid;
-    grid-template-columns: 1fr auto 1fr;
-    align-items: baseline;
-    gap: var(--space-3);
-    padding-bottom: var(--space-3);
-    border-bottom: 1px solid var(--rule);
-
-    > :first-child {
-      justify-self: start;
-    }
-  }
-
-  .brand {
-    margin: 0;
-    justify-self: center;
-    font-family: var(--font-mono);
-    font-size: var(--text-lg);
-    font-weight: 600;
-    letter-spacing: 0.02em;
-    color: var(--ink);
-  }
-
-  .mode {
-    margin: 0;
-    justify-self: end;
-    font-family: var(--font-mono);
-    font-size: var(--text-xs);
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--ink-faint);
-  }
-
   .prompt {
     display: flex;
     flex-direction: column;
