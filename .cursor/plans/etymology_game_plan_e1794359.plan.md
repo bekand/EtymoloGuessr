@@ -1,6 +1,6 @@
 ---
 name: Etymology game plan
-overview: "EtymoloGuessr v1 is playable locally: Python ETL, Go API + Postgres, React paper/ink UI (Easy MC + Hard graph editor), including the gloss-aligned homograph allowlist. Next goal is Railway (Vite/Caddy SPA + Go API, JSONL in-process, no hosted Postgres)."
+overview: "EtymoloGuessr v1 is playable on main: Python ETL, Go API + Postgres (local) / JSONL catalog (prod path), React paper/ink UI (Easy MC + Hard graph editor). Compose covers Postgres + API; frontend stays Vite locally. Remaining: optional frontend Compose service, puzzle load / full generate against a live DB, polish/docs; accounts/leaderboards out of scope."
 todos:
   - id: etl-cli
     content: "Python Typer CLI: refresh, generate (--n, stdout/jsonl/db), reset, doctor, stats, inspect, validate, load, disable"
@@ -12,7 +12,7 @@ todos:
     content: Extract LCA puzzles, quality filters, MC distractors, hashed ids, rejection funnel
     status: completed
   - id: db-api
-    content: Postgres puzzle schema + Go API GET random/by-id / POST solve (hide gold until submit)
+    content: Postgres puzzle schema + Go API GET random/by-id / POST solve (hide gold until submit); JSONL catalog path for Railway
     status: completed
   - id: design-system
     content: Paper/ink tokens + primitives (Sheet, IndexCard, PostIt, InkButton, Stamp, Colophon, graph)
@@ -23,30 +23,42 @@ todos:
   - id: frontend-hard
     content: "Hard mode: all nodes in palette, place then draw child→ancestor edges, score exact edge-set"
     status: completed
-  - id: compose
-    content: Docker Compose for Postgres + API; CC BY-SA attribution in UI
+  - id: compose-core
+    content: "Docker Compose Postgres 16 + API; CC BY-SA colophon in UI"
     status: completed
+  - id: compose-frontend
+    content: Optional frontend service in docker-compose.yml (today: pnpm/Vite locally; prod image is Caddy SPA)
+    status: pending
+  - id: puzzle-load
+    content: "Load puzzles into local DB (fixtures via etl reset --reload --fixtures, or full refresh + generate --db); committed data/ is empty stubs"
+    status: pending
   - id: skip-case-qualifiers
     content: Strip/skip Wiktionary [with genitive]-style case-government glosses in first_gloss; reject leftover qualifier-only LCAs
     status: completed
   - id: homograph-allowlist
-    content: Gloss-aligned ancestor-edge allowlist from kaikki etymology_templates so mixed-etymology nodes (English son) walk the sense that matches the stored gloss
+    content: Gloss-aligned ancestor-edge allowlist from kaikki etymology_templates so mixed-etymology nodes walk the sense that matches the stored gloss
     status: completed
   - id: diamond-tests
-    content: "Diamond suite: move ETL tests under etl/tests/, Vitest/Playwright, Postgres integration, CI"
+    content: "Diamond suite: ETL tests under etl/tests/, Vitest/Playwright, Postgres integration, CI"
     status: completed
   - id: doc-sync
-    content: "Catch up frontend README (Hard + Router), etl README defaults (n=0, min_quality=4), OpenAPI GET /puzzles/{id}"
+    content: "Catch up frontend README (Hard + Router), etl README defaults, OpenAPI GET /puzzles/{id}"
     status: completed
-  - id: cloud-deploy
-    content: "Railway: Vite/Caddy SPA + Go API, JSONL catalog at boot (no hosted Postgres); PORT, CORS, snapshot, memStore"
+  - id: cloud-deploy-code
+    content: "Railway-ready code on main: Vite/Caddy SPA + Go JSONL catalog at boot, PORT, CORS, snapshot, memStore"
+    status: completed
+  - id: polish-docs
+    content: Keep Context/READMEs/plans aligned; known UI polish (stamp hit target, puzzle-lock after --db)
     status: pending
+  - id: accounts-later
+    content: "Out of scope v1: accounts, persistent scores, leaderboards (empty users/scores tables only)"
+    status: cancelled
 isProject: false
 ---
 
 # EtymoloGuessr
 
-**Status:** v1 is playable locally, including the gloss-aligned homograph allowlist. Python ETL writes puzzle rows (JSONL and/or Postgres), a Go API serves one at a time (hiding the answer until submit), and a React UI plays Easy and Hard. Last full generate emitted ~3,678 quality-4 puzzles ([`data/reports/funnel.json`](data/reports/funnel.json)). Frontend is still Vite-only (not in Compose). Next goal is **cloud-deployable on Railway**. This plan is the product/architecture source of truth; layer READMEs hold commands.
+**Status (verified against `main` @ `63659d4`):** v1 is playable locally, including the gloss-aligned homograph allowlist. Python ETL writes puzzle rows (JSONL and/or Postgres), a Go API serves one at a time (hiding the answer until submit), and a React UI plays Easy and Hard. Compose runs **Postgres 16 + API**; the frontend is still **Vite/`pnpm` locally** (not a Compose service). Railway-ready code (JSONL catalog, frontend Dockerfile/Caddy, `PORT`) is on main. Committed `data/` is gitignored stubs — load fixtures or generate before playing against real rows. This plan is the product/architecture source of truth in-repo; Agent Store copies live under Context `docs/`. Layer READMEs hold commands.
 
 Wiktionary-derived data is noisy and **has no meanings**, so the pipeline joins glosses from kaikki/wiktextract and **prefers semantic-shift pairs** so multiple-choice is not trivial (EN *father* / DE *Vater* both mean “father”).
 
@@ -275,13 +287,19 @@ Do not add Railway Postgres. Do not run ETL on Railway. Catalog updates = regene
 
 ## Remaining work
 
-**Cloud deploy on Railway** — `PORT` fallback, file-store `memStore` + JSONL snapshot, frontend Dockerfile/Caddyfile, `VITE_API_URL` / `CORS_ORIGINS`, Serverless, README deploy steps. Code is the follow-up to this plan.
+**Shipped on main (no longer open code):** Railway-ready API (JSONL at boot / embed, `PORT`, health without Postgres when file store is active), frontend Dockerfile/Caddyfile, catalog snapshot under `backend/internal/catalog/`, README deploy steps; gloss-aligned homograph allowlist; case-qualifier stripping; diamond tests + CI.
 
-Shipped since earlier remaining-work lists: gloss-aligned homograph allowlist (`etymology_parent_terms` / `_align_ancestor_edges` / `etym_parents.json`, *son* unit tests + fixture CLI check that no `English:son` → `Spanish:son` gold edge is emitted); case-qualifier stripping in `first_gloss` plus `inflection_lca`; ETL tests under `etl/tests/`; Vitest + MSW Easy round; Playwright Easy/Hard (click-to-place); throwaway compose on 5433; CI.
+**Still open:**
 
-Known polish, not blocking: stamp click near the animated border can miss; after `--db` the UI lock may hold a deleted id until 404/Next.
+1. **Puzzle load** — clean checkout `data/` is empty stubs; run `etl reset --all --reload --fixtures` (or full `refresh` + `generate --db` / JSONL) against a live stack before playing.
+2. **Optional frontend in Compose** — local play loop remains `pnpm dev`; prod Caddy image exists for Railway.
+3. **Polish / docs** — stamp hit target near animated border; after `--db` the UI lock may hold a deleted id until 404/Next; keep Context/READMEs/plans aligned.
+4. **Out of scope v1** — accounts, persistent scores, leaderboards, daily challenge (empty `users` / `scores` only).
+
+Ops follow-up (not blocking the tree): create/configure the Railway project from the README if a public URL is desired.
 
 ## Suggested next build order
 
-1. Railway-ready API (JSONL at boot, `PORT`, health without Postgres) + Vite/Caddy frontend service + catalog snapshot.
-2. Then, if v1 still feels solid on a public URL: accounts / scores / daily — not before (that is when a real DB returns).
+1. Smoke Easy/Hard against fixture-loaded local Compose (or a full generate).
+2. Optionally add a frontend Compose service, or deploy the existing Railway-ready images.
+3. Defer accounts / scores / daily until after a public playable URL feels solid (that is when a real DB returns).
