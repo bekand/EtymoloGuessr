@@ -1,4 +1,4 @@
-import type { Graph, Term } from '@/api/types'
+import type { Graph, PuzzleMode, Term } from '@/api/types'
 import { EtymologyGraph, Stamp } from '@/ui'
 import { joinClasses } from '@/utils/joinClasses'
 import './FeedbackScreen.scss'
@@ -9,13 +9,14 @@ export type FeedbackResult = {
 }
 
 type FeedbackScreenProps = {
+  mode: PuzzleMode
   result?: FeedbackResult
   leafA?: Term
   leafB?: Term
   onNext: () => void
 }
 
-export function FeedbackScreen({ result, leafA, leafB, onNext }: FeedbackScreenProps) {
+export function FeedbackScreen({ mode, result, leafA, leafB, onNext }: FeedbackScreenProps) {
   const solved = Boolean(result)
 
   return (
@@ -34,7 +35,11 @@ export function FeedbackScreen({ result, leafA, leafB, onNext }: FeedbackScreenP
       )}
       {solved ? (
         <div className="nextRow">
-          <Stamp onClick={onNext} aria-label="Load the next puzzle">
+          <Stamp
+            tone={mode === 'hard' ? 'red' : 'green'}
+            onClick={onNext}
+            aria-label="Load the next puzzle"
+          >
             Next
           </Stamp>
         </div>

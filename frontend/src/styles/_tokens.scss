@@ -10,6 +10,7 @@
   --ink: #100e0c;
   --ink-muted: #2e2a26;
   --ink-faint: #5a544c;
+  --ink-blue: #1a3d5c;
   --rule: #cfc4b2;
 
   /* Post-it accents — low saturation */
@@ -19,6 +20,8 @@
   --note-green: #d3dec4;
 
   /* Stamp — primary actions, used sparingly */
+  --stamp-black: var(--ink);
+  --stamp-green: #215a3c;
   --stamp-red: #7a2424;
   --stamp-red-soft: rgba(122, 36, 36, 0.14);
 
@@ -45,8 +48,6 @@
   --radius-md: 2px;
 
   --stack-offset: 2px;
-  --tilt-soft: -0.6deg;
-  --tilt-alt: 0.8deg;
   --stamp-tilt: -1.5deg;
   --stamp-tilt-hover: -2.5deg;
 

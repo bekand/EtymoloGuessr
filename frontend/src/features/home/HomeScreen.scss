@@ -1,4 +1,5 @@
 @use '../../styles/breakpoints' as bp;
+@use '../../styles/mixins' as mx;
 
 @keyframes home-wash {
   from {
@@ -9,18 +10,6 @@
   to {
     opacity: 1;
     transform: scale(1.02);
-  }
-}
-
-@keyframes home-rise {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
   }
 }
 
@@ -38,13 +27,9 @@
 
 .homeScreen {
   position: relative;
-  display: flex;
-  flex-direction: column;
+  @include mx.page-shell(var(--space-5));
   align-items: center;
   justify-content: center;
-  gap: var(--space-5);
-  min-height: 100vh;
-  padding: var(--page-gutter);
   overflow: hidden;
   background: var(--surface);
 
@@ -68,16 +53,12 @@
     width: min(100%, 34rem);
     min-height: auto;
     padding: clamp(2rem, 5vw, 3.25rem) clamp(1.5rem, 4vw, 2.75rem);
-    animation: home-rise var(--duration-med) var(--ease-paper) both;
+    @include mx.settle-in(12px);
   }
 
   .pageLabel {
+    @include mx.mono-kicker($tracking: 0.16em);
     margin: 0 0 var(--space-4);
-    font-family: var(--font-mono);
-    font-size: var(--text-xs);
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: var(--ink-faint);
   }
 
   .brand {

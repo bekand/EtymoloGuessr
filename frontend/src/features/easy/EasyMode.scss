@@ -1,30 +1,12 @@
 @use '../../styles/breakpoints' as bp;
-
-@keyframes easy-mode-settle {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
+@use '../../styles/mixins' as mx;
 
 .easyMode {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-6);
-  min-height: 100vh;
-  padding: var(--page-gutter);
-  animation: easy-mode-settle var(--duration-med) var(--ease-paper) both;
+  @include mx.page-shell(var(--space-6));
+  @include mx.settle-in;
 
   .prompt {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-4);
+    @include mx.flex-col-center(var(--space-4));
     text-align: center;
   }
 
@@ -52,27 +34,16 @@
   }
 
   .playRow {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-5);
+    @include mx.flex-col-center(var(--space-5));
     width: 100%;
   }
 
   .choices {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-3);
+    @include mx.flex-col-center(var(--space-3));
   }
 
   .sectionLabel {
-    margin: 0;
-    font-family: var(--font-mono);
-    font-size: var(--text-xs);
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--ink-faint);
+    @include mx.mono-kicker;
   }
 
   .notes {
@@ -105,7 +76,8 @@
     }
 
     .notes {
-      grid-template-columns: minmax(0, 1fr);
+      grid-template-columns: minmax(0, 15.75rem);
+      justify-content: center;
       width: 100%;
     }
 
@@ -121,7 +93,8 @@
     }
 
     .notes {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: repeat(2, minmax(0, 15.75rem));
+      justify-content: center;
       width: 100%;
     }
 

@@ -5,7 +5,8 @@ test('hard mode places cards and reveals gold after submit', async ({ page }) =>
   await page.getByRole('button', { name: 'Play Hard mode' }).click()
 
   await expect(page.getByLabel('Word cards')).toBeVisible()
-  await expect(page.getByText(/Hard\s+\[ Streak 0 \]/)).toBeVisible()
+  await expect(page.locator('.modeLabel')).toHaveText('Hard')
+  await expect(page.getByText('[ Streak 0 ]')).toBeVisible()
   await expect(page.getByRole('button', { name: /^Place / }).first()).toBeVisible()
 
   while ((await page.getByRole('button', { name: /^Place / }).count()) > 0) {

@@ -1,7 +1,7 @@
-import type { CSSProperties, ReactNode } from 'react'
+import type { AnimationEventHandler, CSSProperties, ReactNode } from 'react'
 import './Sheet.scss'
 
-type SheetTone = 'paper' | 'ruled' | 'kraft' | 'blotter'
+type SheetTone = 'paper' | 'kraft'
 
 type SheetProps = {
   children: ReactNode
@@ -9,6 +9,7 @@ type SheetProps = {
   className?: string
   style?: CSSProperties
   as?: 'main' | 'section' | 'div'
+  onAnimationEnd?: AnimationEventHandler<HTMLElement>
 }
 
 export function Sheet({
@@ -17,11 +18,12 @@ export function Sheet({
   className,
   style,
   as: Tag = 'div',
+  onAnimationEnd,
 }: SheetProps) {
   const classes = ['sheet', tone, className].filter(Boolean).join(' ')
 
   return (
-    <Tag className={classes} style={style}>
+    <Tag className={classes} style={style} onAnimationEnd={onAnimationEnd}>
       {children}
     </Tag>
   )

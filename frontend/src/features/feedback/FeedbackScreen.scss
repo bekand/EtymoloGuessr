@@ -1,16 +1,4 @@
-@use '../../styles/breakpoints' as bp;
-
-@keyframes feedback-settle {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
+@use '../../styles/mixins' as mx;
 
 .feedbackScreen {
   display: flex;
@@ -19,7 +7,7 @@
   gap: var(--space-4);
   width: min(100%, 52rem);
   margin-inline: auto;
-  animation: feedback-settle var(--duration-med) var(--ease-paper) both;
+  @include mx.settle-in;
 
   .verdict {
     margin: 0 auto;
@@ -43,24 +31,13 @@
   }
 
   .graphPlaceholder {
-    width: 100%;
-    height: min(34rem, 62vh);
-    min-height: 20rem;
-    background: var(--paper-blotter);
-    border: 1px solid var(--rule);
-    border-radius: 2px;
+    @include mx.graph-viewport;
+    @include mx.blotter-panel;
   }
 
   .nextRow {
     display: flex;
     justify-content: flex-end;
     padding-top: var(--space-1);
-  }
-
-  @include bp.mobile {
-    .graphPlaceholder {
-      height: min(22rem, 52vh);
-      min-height: 16rem;
-    }
   }
 }

@@ -2,27 +2,27 @@ import type { ButtonHTMLAttributes, ReactNode } from 'react'
 import { useId } from 'react'
 import './Stamp.scss'
 
-type HintPlacement = 'bottom' | 'left'
+export type StampTone = 'black' | 'red' | 'green'
 
 type StampProps = {
   children: ReactNode
   size?: 'md' | 'lg'
+  tone?: StampTone
   hint?: string
-  hintPlacement?: HintPlacement
   className?: string
 } & ButtonHTMLAttributes<HTMLButtonElement>
 
 export function Stamp({
   children,
   size = 'md',
+  tone = 'black',
   hint,
-  hintPlacement = 'bottom',
   className,
   type = 'button',
   ...rest
 }: StampProps) {
   const hintId = useId()
-  const classes = ['stamp', size, className].filter(Boolean).join(' ')
+  const classes = ['stamp', size, tone, className].filter(Boolean).join(' ')
 
   const button = (
     <button
@@ -42,7 +42,7 @@ export function Stamp({
   }
 
   return (
-    <span className={`stampWithHint ${hintPlacement}`}>
+    <span className="stampWithHint">
       {button}
       <span id={hintId} role="tooltip" className="hint">
         {hint}

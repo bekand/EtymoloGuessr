@@ -6,8 +6,24 @@
   box-sizing: border-box;
 }
 
+@keyframes settle-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--settle-y, 8px));
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 html {
   color-scheme: light;
+}
+
+html:has(.settling) {
+  overflow: hidden;
 }
 
 body {

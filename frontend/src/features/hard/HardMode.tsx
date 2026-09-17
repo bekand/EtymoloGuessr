@@ -9,6 +9,8 @@ import {
 } from '@/api/puzzles'
 import type { GraphEdge, PuzzlePrompt } from '@/api/types'
 import { Colophon, PlayHeader, Sheet, Stamp } from '@/ui'
+import { joinClasses } from '@/utils/joinClasses'
+import { useSettlingClip } from '@/utils/useSettlingClip'
 import { useStreak } from '@/utils/streak'
 import { FeedbackScreen } from '../feedback/FeedbackScreen'
 import { HardCanvas, type HardCanvasHandle } from './HardCanvas'
@@ -30,6 +32,7 @@ export function HardMode() {
   const [gradedPuzzle, setGradedPuzzle] = useState<PuzzlePrompt>()
   const [allPlaced, setAllPlaced] = useState(false)
   const { streak, recordResult } = useStreak('hard')
+  const { settling, onAnimationEnd } = useSettlingClip()
 
   const solveMutation = useMutation({
     mutationFn: ({ id, edges }: { id: string; edges: GraphEdge[] }) => solveHardPuzzle(id, edges),
@@ -81,7 +84,12 @@ export function HardMode() {
   }
 
   return (
-    <Sheet as="main" tone="paper" className="hardMode">
+    <Sheet
+      as="main"
+      tone="kraft"
+      className={joinClasses('hardMode', settling && 'settling')}
+      onAnimationEnd={onAnimationEnd}
+    >
       <PlayHeader mode="hard" streak={streak} />
 
       {revealing ? null : (
@@ -92,6 +100,7 @@ export function HardMode() {
 
       {revealing ? (
         <FeedbackScreen
+          mode="hard"
           result={solveMutation.data}
           leafA={puzzle?.leafA}
           leafB={puzzle?.leafB}
@@ -117,7 +126,6 @@ export function HardMode() {
             {loadError || missingGraph ? (
               <Stamp
                 hint={stampHint}
-                hintPlacement="left"
                 onClick={() => {
                   void puzzleQuery.refetch()
                 }}
@@ -127,8 +135,8 @@ export function HardMode() {
               </Stamp>
             ) : (
               <Stamp
+                tone="red"
                 hint={stampHint}
-                hintPlacement="left"
                 disabled={!puzzle || !graph || !allPlaced || solveMutation.isPending}
                 aria-label="Submit graph"
                 onClick={() => {

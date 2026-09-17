@@ -54,24 +54,34 @@ describe('EasyMode', () => {
 
     expect(await screen.findByRole('article', { name: 'father' })).toBeInTheDocument()
     expect(screen.getByRole('article', { name: 'Vater' })).toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: /^Choice / })).toHaveLength(4)
-    expect(screen.getByText(/Easy\s+\[ Streak 0 \]/)).toBeInTheDocument()
+    const choices = screen.getAllByRole('button', { name: /^Choice / })
+    expect(choices).toHaveLength(4)
+    for (const button of choices) {
+      expect(button.querySelector('.marker')).not.toBeNull()
+    }
+    expect(screen.getByText('Easy', { selector: '.modeLabel' })).toBeInTheDocument()
+    expect(screen.getByText('[ Streak 0 ]')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Submit answer' })).toHaveClass('green')
 
-    await user.click(screen.getByRole('button', { name: /a male parent/ }))
+    const choice = screen.getByRole('button', { name: /a male parent/ })
+    await user.click(choice)
+    expect(choice).toHaveClass('selected')
+    expect(choice.querySelector('.marker')).toHaveTextContent(/^[A-D]$/)
     await user.click(screen.getByRole('button', { name: 'Submit answer' }))
 
     expect(await screen.findByText(/Correct!/)).toBeInTheDocument()
     expect(screen.getByTestId('gold-graph')).toBeInTheDocument()
-    expect(screen.getByText(/Easy\s+\[ Streak 1 \]/)).toBeInTheDocument()
+    expect(screen.getByText('[ Streak 1 ]')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Load the next puzzle' })).toHaveClass('green')
 
     await user.click(screen.getByRole('button', { name: 'Load the next puzzle' }))
     expect(await screen.findByRole('article', { name: 'hound' })).toBeInTheDocument()
     expect(screen.queryByText(/Correct!/)).not.toBeInTheDocument()
-    expect(screen.getByText(/Easy\s+\[ Streak 1 \]/)).toBeInTheDocument()
+    expect(screen.getByText('[ Streak 1 ]')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /a river/ }))
     await user.click(screen.getByRole('button', { name: 'Submit answer' }))
     expect(await screen.findByText(/Unfortunately, that's not correct/)).toBeInTheDocument()
-    expect(screen.getByText(/Easy\s+\[ Streak 0 \]/)).toBeInTheDocument()
+    expect(screen.getByText('[ Streak 0 ]')).toBeInTheDocument()
   })
 })

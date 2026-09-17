@@ -9,7 +9,9 @@ import {
 } from '@/api/puzzles'
 import type { PuzzlePrompt } from '@/api/types'
 import { Colophon, IndexCard, PlayHeader, PostIt, Sheet, Stamp } from '@/ui'
+import { joinClasses } from '@/utils/joinClasses'
 import { shuffle } from '@/utils/shuffle'
+import { useSettlingClip } from '@/utils/useSettlingClip'
 import { useStreak } from '@/utils/streak'
 import { FeedbackScreen } from '../feedback/FeedbackScreen'
 import './EasyMode.scss'
@@ -33,6 +35,7 @@ export function EasyMode() {
   const [gradedPuzzle, setGradedPuzzle] = useState<PuzzlePrompt>()
   const [explainOpen, setExplainOpen] = useState<'left' | 'right' | null>(null)
   const { streak, recordResult } = useStreak('easy')
+  const { settling, onAnimationEnd } = useSettlingClip()
 
   const solveMutation = useMutation({
     mutationFn: ({ id, choiceId }: { id: string; choiceId: string }) =>
@@ -158,7 +161,6 @@ export function EasyMode() {
         {loadError ? (
           <Stamp
             hint={stampHint}
-            hintPlacement="left"
             onClick={() => {
               void puzzleQuery.refetch()
             }}
@@ -168,8 +170,8 @@ export function EasyMode() {
           </Stamp>
         ) : (
           <Stamp
+            tone="green"
             hint={stampHint}
-            hintPlacement="left"
             disabled={!puzzle || !selectedId || solveMutation.isPending}
             aria-label="Submit answer"
             onClick={() => {
@@ -189,13 +191,19 @@ export function EasyMode() {
   }
 
   return (
-    <Sheet as="main" tone="blotter" className="easyMode">
+    <Sheet
+      as="main"
+      tone="kraft"
+      className={joinClasses('easyMode', settling && 'settling')}
+      onAnimationEnd={onAnimationEnd}
+    >
       <PlayHeader mode="easy" streak={streak} />
 
       {revealing ? null : renderPrompt()}
 
       {revealing ? (
         <FeedbackScreen
+          mode="easy"
           result={solveMutation.data}
           leafA={puzzle?.leafA}
           leafB={puzzle?.leafB}

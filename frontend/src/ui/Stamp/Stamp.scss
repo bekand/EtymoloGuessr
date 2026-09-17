@@ -1,4 +1,5 @@
 @use '../../styles/breakpoints' as bp;
+@use '../../styles/mixins' as mx;
 
 .stampWithHint {
   position: relative;
@@ -8,6 +9,8 @@
   .hint {
     position: absolute;
     z-index: 1;
+    top: 50%;
+    right: calc(100% + 1rem);
     width: max-content;
     max-width: 22ch;
     margin: 0;
@@ -16,36 +19,18 @@
     font-size: var(--text-xs);
     letter-spacing: 0.03em;
     line-height: 1.4;
+    text-align: right;
     color: var(--ink-faint);
     opacity: 0;
     pointer-events: none;
+    transform: translateY(-50%) translateX(2px);
     transition:
       opacity var(--duration-fast) var(--ease-paper),
       transform var(--duration-fast) var(--ease-paper);
   }
 
-  &.bottom .hint {
-    top: calc(100% + 0.45rem);
-    left: 50%;
-    text-align: center;
-    transform: translateX(-50%) translateY(-2px);
-  }
-
-  &.bottom:hover .hint,
-  &.bottom:focus-within .hint {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
-  }
-
-  &.left .hint {
-    top: 50%;
-    right: calc(100% + 1rem);
-    text-align: right;
-    transform: translateY(-50%) translateX(2px);
-  }
-
-  &.left:hover .hint,
-  &.left:focus-within .hint {
+  &:hover .hint,
+  &:focus-within .hint {
     opacity: 1;
     transform: translateY(-50%) translateX(0);
   }
@@ -58,16 +43,11 @@
 }
 
 .stamp {
-  appearance: none;
+  @include mx.unstyled-button;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  margin: 0;
   padding: 0;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  color: var(--stamp-red);
   transform: rotate(var(--stamp-tilt));
   transition: opacity var(--duration-fast) var(--ease-paper);
 
@@ -94,7 +74,7 @@
     border: 3px solid currentColor;
     border-radius: 4px;
     box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 45%, transparent);
-    background: color-mix(in srgb, var(--stamp-red) 6%, transparent);
+    background: color-mix(in srgb, currentColor 6%, transparent);
     pointer-events: none;
     transition: transform var(--duration-med) var(--ease-paper);
   }
@@ -108,6 +88,18 @@
     line-height: 1;
     mix-blend-mode: multiply;
     opacity: 0.95;
+  }
+
+  &.black {
+    color: var(--stamp-black);
+  }
+
+  &.red {
+    color: var(--stamp-red);
+  }
+
+  &.green {
+    color: var(--stamp-green);
   }
 
   &.md {

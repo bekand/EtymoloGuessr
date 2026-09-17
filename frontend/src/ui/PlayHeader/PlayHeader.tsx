@@ -18,12 +18,13 @@ export function PlayHeader({ mode, streak }: PlayHeaderProps) {
 
   return (
     <header className="playHeader">
-      <InkButton variant="ghost" onClick={() => navigate('/')}>
+      <InkButton onClick={() => navigate('/')}>
         ← Home
       </InkButton>
       <p className="brand">EtymoGuessr</p>
       <p className="mode" aria-live="polite">
-        {`${MODE_LABEL[mode]}   [ Streak ${streak} ]`}
+        <span className="modeLabel">{MODE_LABEL[mode]}</span>
+        <span className="streak">{`[ Streak ${streak} ]`}</span>
       </p>
     </header>
   )

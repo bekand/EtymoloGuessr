@@ -1,0 +1,125 @@
+@use 'breakpoints' as bp;
+
+// Motion
+
+@mixin settle-in($y: 8px) {
+  --settle-y: #{$y};
+  animation: settle-in var(--duration-med) var(--ease-paper) both;
+}
+
+// Layout
+
+@mixin page-shell($gap: var(--space-4)) {
+  display: flex;
+  flex-direction: column;
+  gap: $gap;
+  min-height: 100vh;
+  padding: var(--page-gutter);
+}
+
+@mixin flex-col-center($gap) {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: $gap;
+}
+
+// Surfaces
+
+@mixin paper-ruled {
+  background: var(--paper-ruled);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-md);
+  box-shadow: var(--stack-offset) var(--stack-offset) 0 rgba(26, 23, 20, 0.1);
+}
+
+@mixin blotter-panel {
+  background: var(--paper-blotter);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-md);
+}
+
+@mixin graph-viewport {
+  width: 100%;
+  height: min(34rem, 62vh);
+  min-height: 20rem;
+
+  @include bp.mobile {
+    height: min(22rem, 52vh);
+    min-height: 16rem;
+  }
+}
+
+// Type
+
+@mixin mono-kicker(
+  $tracking: 0.12em,
+  $color: var(--ink-faint),
+  $size: var(--text-xs)
+) {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: $size;
+  letter-spacing: $tracking;
+  text-transform: uppercase;
+  color: $color;
+}
+
+@mixin mono-term($size: var(--text-sm), $tracking: 0.01em) {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: $size;
+  font-weight: 500;
+  letter-spacing: $tracking;
+  color: var(--ink);
+}
+
+@mixin serif-italic($size: var(--text-xs)) {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: $size;
+  color: var(--ink-muted);
+}
+
+// Controls
+
+@mixin unstyled-button {
+  appearance: none;
+  margin: 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+@mixin ink-underline(
+  $size: var(--text-sm),
+  $tracking: 0.06em,
+  $color: var(--ink-muted)
+) {
+  @include unstyled-button;
+  font-family: var(--font-mono);
+  font-size: $size;
+  letter-spacing: $tracking;
+  text-transform: uppercase;
+  line-height: 1.2;
+  color: $color;
+  border-bottom: 1px solid transparent;
+  transition:
+    color var(--duration-fast) var(--ease-paper),
+    border-color var(--duration-fast) var(--ease-paper),
+    opacity var(--duration-fast) var(--ease-paper);
+
+  &:hover:not(:disabled) {
+    color: var(--ink);
+    border-bottom-color: var(--ink-muted);
+  }
+}
+
+// Utilities
+
+@mixin line-clamp($n) {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: $n;
+  overflow: hidden;
+}
