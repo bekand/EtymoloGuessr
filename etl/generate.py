@@ -14,6 +14,7 @@ from etl.derive import (
     canonical_lemma,
     gloss_for,
     is_grammatical_gloss,
+    is_redirect_gloss,
     load_derived_edges,
     load_gloss_index,
     load_lemma_index,
@@ -146,6 +147,11 @@ def lang_pair_code(lang_a: str, lang_b: str, leaf_codes: dict[str, str]) -> str:
     return "-".join(sorted([ca, cb]))
 
 
+def involves_english(cand: dict[str, Any]) -> bool:
+    """True when either leaf is English (English-involving pair)."""
+    return cand["leaf_a"]["lang"] == "English" or cand["leaf_b"]["lang"] == "English"
+
+
 def build_graph(edges, ancestor_reltypes: set[str]) -> nx.DiGraph:
     g = nx.DiGraph()
     for row in edges.itertuples(index=False):
@@ -275,12 +281,17 @@ class StageTimer:
 def _iter_related_leaf_pairs(
     leaves_with_gloss: list[str],
     paths_by_leaf: dict[str, dict[str, list[str]]],
+    rng=None,
 ) -> Any:
     """Yield each unordered leaf pair that shares at least one ancestor (once).
 
     Avoids the naive all-pairs O(L^2) walk when most leaves do not share ancestry.
     Worst case (one universal ancestor) is still O(L^2), but typical etymology
     graphs are much sparser.
+
+    Ancestors stay ordered by descending fan-out (speed). When ``rng`` is set,
+    one pair is taken from each ancestor per round (round-robin) so English-only
+    families cannot monopolize early extraction before non-English ones appear.
     """
     by_ancestor: dict[str, list[str]] = defaultdict(list)
     for leaf_id in leaves_with_gloss:
@@ -288,18 +299,71 @@ def _iter_related_leaf_pairs(
             if anc != leaf_id:
                 by_ancestor[anc].append(leaf_id)
 
-    # Stable order: ancestors by descending fan-out then id; leaves sorted per bucket.
-    ancestor_order = sorted(by_ancestor.keys(), key=lambda a: (-len(by_ancestor[a]), a))
+    fanout_groups: dict[int, list[str]] = defaultdict(list)
+    for anc, members in by_ancestor.items():
+        fanout_groups[len(members)].append(anc)
+    ancestor_order: list[str] = []
+    for fan in sorted(fanout_groups.keys(), reverse=True):
+        chunk = fanout_groups[fan]
+        if rng is not None:
+            rng.shuffle(chunk)
+        else:
+            chunk.sort()
+        ancestor_order.extend(chunk)
+
     seen_pairs: set[tuple[str, str]] = set()
+
+    if rng is None:
+        for anc in ancestor_order:
+            group = sorted(set(by_ancestor[anc]))
+            for i, leaf_a_id in enumerate(group):
+                for leaf_b_id in group[i + 1 :]:
+                    key = (leaf_a_id, leaf_b_id) if leaf_a_id < leaf_b_id else (leaf_b_id, leaf_a_id)
+                    if key in seen_pairs:
+                        continue
+                    seen_pairs.add(key)
+                    yield leaf_a_id, leaf_b_id
+        return
+
+    # Cursor per ancestor: (shuffled group, i, j). Round-robin one pair each.
+    cursors: list[list[Any]] = []
     for anc in ancestor_order:
-        group = sorted(set(by_ancestor[anc]))
-        for i, leaf_a_id in enumerate(group):
-            for leaf_b_id in group[i + 1 :]:
-                key = (leaf_a_id, leaf_b_id) if leaf_a_id < leaf_b_id else (leaf_b_id, leaf_a_id)
-                if key in seen_pairs:
-                    continue
-                seen_pairs.add(key)
-                yield leaf_a_id, leaf_b_id
+        group = list(set(by_ancestor[anc]))
+        if len(group) < 2:
+            continue
+        rng.shuffle(group)
+        cursors.append([group, 0, 1])
+
+    while cursors:
+        rng.shuffle(cursors)
+        alive: list[list[Any]] = []
+        for cur in cursors:
+            group, i, j = cur
+            emitted = False
+            while i < len(group) - 1:
+                while j < len(group):
+                    leaf_a_id, leaf_b_id = group[i], group[j]
+                    j += 1
+                    key = (
+                        (leaf_a_id, leaf_b_id)
+                        if leaf_a_id < leaf_b_id
+                        else (leaf_b_id, leaf_a_id)
+                    )
+                    if key in seen_pairs:
+                        continue
+                    seen_pairs.add(key)
+                    cur[1], cur[2] = i, j
+                    yield leaf_a_id, leaf_b_id
+                    emitted = True
+                    break
+                if emitted:
+                    break
+                i += 1
+                j = i + 1
+                cur[1], cur[2] = i, j
+            if i < len(group) - 1:
+                alive.append(cur)
+        cursors = alive
 
 
 def extract_candidates(
@@ -312,6 +376,7 @@ def extract_candidates(
     min_quality: int = 0,
     progress: Callable[[str, str], None] | None = None,
     lemmas: dict[str, str] | None = None,
+    rng=None,
 ) -> list[dict[str, Any]]:
     leaf_langs = cfg["leaf_languages"]
     ancestor_reltypes = set(cfg["ancestor_reltypes"])
@@ -350,10 +415,15 @@ def extract_candidates(
 
     candidates: list[dict[str, Any]] = []
     seen_pairs: set[tuple[str, str, str]] = set()
-    good_count = 0
+    good_en = 0
+    good_other = 0
+    # Per-bucket headroom: stop when both English and non-English quality counts
+    # reach need_each, or total hits hard_cap (one-bucket graphs / --lang-pair).
     stop_at = None if not limit or limit <= 0 else limit
+    need_each = None if stop_at is None else max(1, stop_at // 2)
+    hard_cap = None if stop_at is None else stop_at * 2
 
-    for leaf_a_id, leaf_b_id in _iter_related_leaf_pairs(leaves_with_gloss, paths_by_leaf):
+    for leaf_a_id, leaf_b_id in _iter_related_leaf_pairs(leaves_with_gloss, paths_by_leaf, rng=rng):
         funnel.bump("pairs_considered")
         lang_a = g.nodes[leaf_a_id]["lang"]
         term_a = g.nodes[leaf_a_id]["term"]
@@ -449,26 +519,33 @@ def extract_candidates(
             high_overlap=high_overlap,
             lca_is_modern=lca_lang in leaf_langs,
         )
-        candidates.append(
-            {
-                "leaf_a": leaf_a,
-                "leaf_b": leaf_b,
-                "lca": lca,
-                "nodes": node_list,
-                "edges": edges,
-                "quality_score": score,
-                "lang_pair": lang_pair_code(lang_a, lang_b, leaf_langs),
-            }
-        )
+        cand = {
+            "leaf_a": leaf_a,
+            "leaf_b": leaf_b,
+            "lca": lca,
+            "nodes": node_list,
+            "edges": edges,
+            "quality_score": score,
+            "lang_pair": lang_pair_code(lang_a, lang_b, leaf_langs),
+        }
+        candidates.append(cand)
         funnel.bump("candidates")
-        if score >= min_quality:
-            good_count += 1
-            if stop_at is not None and good_count >= stop_at:
+        if score >= min_quality and need_each is not None:
+            if involves_english(cand):
+                good_en += 1
+            else:
+                good_other += 1
+            both_full = good_en >= need_each and good_other >= need_each
+            # One-bucket graphs never fill the empty side; stop once the leading
+            # side alone hits hard_cap (round-robin makes mixed graphs fill both).
+            starved = min(good_en, good_other) == 0 and max(good_en, good_other) >= hard_cap
+            if both_full or starved:
                 funnel.bump("early_exit")
                 if progress:
                     progress(
                         "candidate pairs",
-                        f"early exit at {good_count} >= min_quality (pairs={funnel.counts['pairs_considered']})",
+                        f"early exit en={good_en} other={good_other} "
+                        f"(pairs={funnel.counts['pairs_considered']})",
                     )
                 return candidates
 
@@ -496,6 +573,8 @@ def make_choices(
     for gloss in distractor_pool:
         if gloss == correct_gloss:
             continue
+        if is_redirect_gloss(gloss) or is_grammatical_gloss(gloss):
+            continue
         if gloss not in unique:
             unique.append(gloss)
     if len(unique) < need:
@@ -507,6 +586,24 @@ def make_choices(
     choices = [{"id": f"c{i}", "gloss": gloss} for i, gloss in enumerate(options)]
     correct_id = next(c["id"] for c in choices if c["gloss"] == correct_gloss)
     return choices, correct_id
+
+
+def prepare_score_buckets(
+    candidates: list[dict[str, Any]],
+    rng,
+) -> list[tuple[list[dict[str, Any]], list[dict[str, Any]]]]:
+    """Group quality-passing candidates by score (desc), shuffle English / other."""
+    by_score: dict[int, list[dict[str, Any]]] = defaultdict(list)
+    for cand in candidates:
+        by_score[cand["quality_score"]].append(cand)
+    buckets: list[tuple[list[dict[str, Any]], list[dict[str, Any]]]] = []
+    for score in sorted(by_score.keys(), reverse=True):
+        en_bucket = [c for c in by_score[score] if involves_english(c)]
+        other_bucket = [c for c in by_score[score] if not involves_english(c)]
+        rng.shuffle(en_bucket)
+        rng.shuffle(other_bucket)
+        buckets.append((en_bucket, other_bucket))
+    return buckets
 
 
 def to_puzzle(
@@ -605,6 +702,7 @@ def generate_puzzles(
         min_quality=min_quality,
         progress=timer.stage if verbose else None,
         lemmas=lemmas,
+        rng=rng,
     )
     if lang_pairs:
         want = {p.lower() for p in lang_pairs}
@@ -618,32 +716,57 @@ def generate_puzzles(
     funnel.bump("below_min_quality", before_q - len(candidates))
     timer.stage("filter quality", f"{len(candidates)} left (min_quality={min_quality})")
 
-    candidates.sort(key=lambda c: (-c["quality_score"], c["lang_pair"], c["leaf_a"]["term"], c["leaf_b"]["term"]))
-
     # Build distractors from the full quality-passing candidate set *before* leaf
     # reuse / emit slicing. Slicing first (as in an earlier revision) left `--n`
     # small batches with too few unique LCA glosses and forced placeholders.
     distractor_pool = [c["lca"]["gloss"] for c in candidates if c["lca"].get("gloss")]
 
+    # Quality-first, then English vs non-English water-fill with seeded shuffles
+    # so A-words and de-en do not lock shared leaves before other pairs.
     puzzles: list[Puzzle] = []
     used_leaves: set[str] = set()
-    for cand in candidates:
-        if n and n > 0 and len(puzzles) >= n:
-            break
+
+    def _try_emit(cand: dict[str, Any]) -> bool:
         key_a = leaf_reuse_key(cand["leaf_a"]["lang"], cand["leaf_a"]["term"])
         key_b = leaf_reuse_key(cand["leaf_b"]["lang"], cand["leaf_b"]["term"])
         if key_a in used_leaves or key_b in used_leaves:
             funnel.bump("leaf_reuse")
-            continue
+            return False
         built = make_choices(cand["lca"]["gloss"], distractor_pool, n_choices, rng)
         if built is None:
             funnel.bump("insufficient_distractors")
-            continue
+            return False
         choices, correct = built
         puzzles.append(to_puzzle(cand, choices, correct, g, glosses))
         used_leaves.add(key_a)
         used_leaves.add(key_b)
         funnel.bump("emitted")
+        return True
+
+    for en_bucket, other_bucket in prepare_score_buckets(candidates, rng):
+        en_i = other_i = 0
+        emitted_en = emitted_other = 0
+        while en_i < len(en_bucket) or other_i < len(other_bucket):
+            if n and n > 0 and len(puzzles) >= n:
+                break
+            prefer_en = emitted_en <= emitted_other
+            if prefer_en and en_i < len(en_bucket):
+                if _try_emit(en_bucket[en_i]):
+                    emitted_en += 1
+                en_i += 1
+            elif other_i < len(other_bucket):
+                if _try_emit(other_bucket[other_i]):
+                    emitted_other += 1
+                other_i += 1
+            elif en_i < len(en_bucket):
+                if _try_emit(en_bucket[en_i]):
+                    emitted_en += 1
+                en_i += 1
+            else:
+                break
+        if n and n > 0 and len(puzzles) >= n:
+            break
+
     timer.stage("emit puzzles", f"{len(puzzles)} puzzles")
 
     funnel.counts["emitted"] = len(puzzles)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from etl.derive import is_grammatical_gloss, is_redirect_gloss
 from etl.models import Puzzle
 from etl.paths import load_config
 
@@ -40,6 +41,8 @@ def validate_puzzle(p: Puzzle, errors: list[str], cfg: dict | None = None) -> No
         _err(errors, pid, "choice ids must be unique")
     if any(not g for g in glosses):
         _err(errors, pid, "choices need gloss text")
+    if any(is_redirect_gloss(g) or is_grammatical_gloss(g) for g in glosses if g):
+        _err(errors, pid, "choices must not use redirect or grammatical-form gloss stubs")
     if p.correct_choice not in ids:
         _err(errors, pid, "correct_choice must match a choice id")
     correct_gloss = next(

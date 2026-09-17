@@ -198,6 +198,20 @@ _FORM_GLOSS_RE = re.compile(
     r")"
 )
 
+# Wiktionary redirect stubs ("alternative form of X"), not lexical meanings.
+# Anchored at start so "One of a number of alternative forms of the same gene…"
+# stays lexical.
+_REDIRECT_GLOSS_RE = re.compile(
+    r"(?ix)^(?:"
+    r"alternative\s+(?:form|spelling|capitalization|typography)"
+    r"|(?:obsolete|archaic|dated|rare)\s+(?:form|spelling)"
+    r"|misspelling|common\s+misspelling"
+    r"|eye\s+dialect|pronunciation\s+spelling"
+    r"|nonstandard\s+form"
+    r"|synonym|abbreviation|initialism|acronym|clipping|ellipsis"
+    r")\s+of\b"
+)
+
 # Wiktionary case-government / auxiliary labels, e.g. ``[with genitive]``,
 # ``[of place] above``. Not chemistry/notation brackets like ``[α]_D``.
 _CASE_QUALIFIER_RE = re.compile(
@@ -209,6 +223,8 @@ _CASE_QUALIFIER_RE = re.compile(
     r")"
     r"[^\]]*\]\s*"
 )
+
+_INLINE_QUOTED_SENSE_RE = re.compile(r'[“"]([^”"]+)[”"]')
 
 _LEMMA_HOPS = 3
 
@@ -239,19 +255,44 @@ def is_grammatical_gloss(text: str | None) -> bool:
     return bool(_FORM_GLOSS_RE.search(s))
 
 
+def is_redirect_gloss(text: str | None) -> bool:
+    """True when a gloss is a Wiktionary redirect stub, not a meaning."""
+    if not text:
+        return False
+    return bool(_REDIRECT_GLOSS_RE.match(text.strip()))
+
+
 def _is_inflection_sense(sense: dict[str, Any], parts: list[str]) -> bool:
+    """True for grammatical form-of senses (not bare redirect stubs)."""
     if sense.get("form_of"):
+        # form_of with a redirect gloss is still a redirect, not an inflection rewrite.
+        if parts and is_redirect_gloss(parts[0]) and not is_grammatical_gloss(parts[0]):
+            return False
         return True
     tags = sense.get("tags") or []
     if isinstance(tags, list) and any(str(t).casefold() == "form-of" for t in tags):
+        if parts and is_redirect_gloss(parts[0]) and not is_grammatical_gloss(parts[0]):
+            return False
         return True
     return bool(parts) and is_grammatical_gloss(parts[0])
+
+
+def _is_redirect_sense(sense: dict[str, Any], parts: list[str]) -> bool:
+    if not parts:
+        return False
+    if is_grammatical_gloss(parts[0]):
+        return False
+    return is_redirect_gloss(parts[0])
+
+
+def _is_nonlexical_sense(sense: dict[str, Any], parts: list[str]) -> bool:
+    return _is_inflection_sense(sense, parts) or _is_redirect_sense(sense, parts)
 
 
 def first_gloss(obj: dict[str, Any]) -> str | None:
     for sense in obj.get("senses") or []:
         parts = _drop_case_qualifiers(_sense_gloss_parts(sense))
-        if not parts or _is_inflection_sense(sense, parts):
+        if not parts or _is_nonlexical_sense(sense, parts):
             continue
         if parts[0].endswith(":") and len(parts) > 1:
             return " ".join(parts)
@@ -265,9 +306,28 @@ def _first_lemma_word(text: str) -> str | None:
         return None
     s = re.split(r"\s+and\s+", s, maxsplit=1, flags=re.IGNORECASE)[0]
     s = s.split("/")[0]
+    s = s.split(":")[0]
     s = re.sub(r"\s*\(.*$", "", s)
-    s = s.rstrip(":").strip()
+    s = s.rstrip(".").strip()
     return s or None
+
+
+def _inline_redirect_sense(text: str) -> str | None:
+    """Extract an embedded meaning from a redirect gloss when the target is missing.
+
+    Handles ``… of lemma: sense`` and ``… of lemma (…, "sense")``.
+    """
+    s = text.strip()
+    if ":" in s:
+        after = s.split(":", 1)[1].strip().rstrip(".")
+        if after and not is_redirect_gloss(after) and not is_grammatical_gloss(after):
+            return after
+    quoted = _INLINE_QUOTED_SENSE_RE.search(s)
+    if quoted:
+        sense = quoted.group(1).strip()
+        if sense and not is_redirect_gloss(sense) and not is_grammatical_gloss(sense):
+            return sense
+    return None
 
 
 def _lemma_from_sense(sense: dict[str, Any], parts: list[str]) -> str | None:
@@ -287,6 +347,7 @@ def _lemma_from_sense(sense: dict[str, Any], parts: list[str]) -> str | None:
 
 
 def _form_lemma(obj: dict[str, Any]) -> str | None:
+    """Citation lemma for a grammatical form-only entry (lemma_index candidate)."""
     word = str(obj.get("word") or "")
     for sense in obj.get("senses") or []:
         parts = _sense_gloss_parts(sense)
@@ -296,6 +357,22 @@ def _form_lemma(obj: dict[str, Any]) -> str | None:
         if lemma and lemma != word:
             return lemma
     return None
+
+
+def _redirect_lemma(obj: dict[str, Any]) -> tuple[str | None, str | None]:
+    """Citation lemma and optional inline sense for a redirect-only entry."""
+    word = str(obj.get("word") or "")
+    for sense in obj.get("senses") or []:
+        parts = _sense_gloss_parts(sense)
+        if not _is_redirect_sense(sense, parts):
+            continue
+        lemma = _lemma_from_sense(sense, parts)
+        inline = _inline_redirect_sense(parts[0]) if parts else None
+        if lemma and lemma != word:
+            return lemma, inline
+        if inline:
+            return None, inline
+    return None, None
 
 
 def _fold_macrons(text: str) -> str:
@@ -312,9 +389,15 @@ def _lookup_lexical(
     key = f"{lang}\t{term}"
     gloss = index.get(key)
     if gloss:
+        # Skip unresolved redirect/grammatical stubs still sitting in an old index.
+        if is_redirect_gloss(gloss) or is_grammatical_gloss(gloss):
+            return None
         return term, gloss
     folded_hit = folded.get(f"{lang}\t{_fold_macrons(term)}")
     if folded_hit:
+        _term, folded_gloss = folded_hit
+        if is_redirect_gloss(folded_gloss) or is_grammatical_gloss(folded_gloss):
+            return None
         return folded_hit
     return None
 
@@ -342,6 +425,41 @@ def _resolve_lemma_gloss(
     return None
 
 
+def _unwrap_redirect_text(
+    index: dict[str, str],
+    lang: str,
+    gloss: str,
+    *,
+    hops: int = _LEMMA_HOPS,
+) -> str | None:
+    """Follow ``alternative form of X`` (etc.) to a lexical gloss, or use inline sense."""
+    seen: set[str] = set()
+    current = gloss
+    for _ in range(hops + 1):
+        if current in seen:
+            break
+        seen.add(current)
+        if not is_redirect_gloss(current):
+            if is_grammatical_gloss(current):
+                return None
+            return current
+        match = re.search(r"(?i)\bof\s+(.+)$", current)
+        inline = _inline_redirect_sense(current)
+        if not match:
+            return inline
+        lemma = _first_lemma_word(match.group(1))
+        if not lemma:
+            return inline
+        hit = index.get(f"{lang}\t{lemma}")
+        if not hit:
+            return inline
+        if is_redirect_gloss(hit) or is_grammatical_gloss(hit):
+            current = hit
+            continue
+        return hit
+    return None
+
+
 def iter_gloss_files(raw: Path | None = None) -> Iterable[Path]:
     raw = raw or raw_dir()
     yield from sorted(raw.glob("kaikki*.jsonl"))
@@ -357,14 +475,17 @@ def index_gloss_objects(
     """Index lexical glosses, then inherit lemma senses onto form-only keys.
 
     Returns ``(gloss_index, lemma_index, etym_parents)``. ``lemma_index`` maps
-    form-only ``lang\\tterm`` keys to the citation lemma whose gloss was
-    inherited. ``etym_parents`` maps ``lang\\tterm`` to related terms from the
-    same kaikki object that supplied the stored gloss (``inh`` / ``bor`` /
-    ``der`` / ``root``). Form-only keys that inherit a gloss do not copy the
-    lemma's parent allowlist.
+    grammatical form-only ``lang\\tterm`` keys to the citation lemma whose gloss
+    was inherited (not redirect stubs — those inherit meaning only).
+    ``etym_parents`` maps ``lang\\tterm`` to related terms from the same kaikki
+    object that supplied the stored gloss (``inh`` / ``bor`` / ``der`` /
+    ``root``). Form-only keys that inherit a gloss do not copy the lemma's
+    parent allowlist.
     """
     index: dict[str, str] = {}
     pending: dict[str, str] = {}
+    pending_redirect: dict[str, str] = {}
+    redirect_inline: dict[str, str] = {}
     parents: dict[str, list[str]] = {}
     for obj in objects:
         lang = obj.get("lang")
@@ -382,30 +503,58 @@ def index_gloss_objects(
                 if parent_terms:
                     parents[key] = parent_terms
             pending.pop(key, None)
+            pending_redirect.pop(key, None)
+            redirect_inline.pop(key, None)
             continue
         if key in index:
             continue
         lemma = _form_lemma(obj)
         if lemma:
             pending.setdefault(key, lemma)
+            continue
+        redir_lemma, inline = _redirect_lemma(obj)
+        if redir_lemma:
+            pending_redirect.setdefault(key, redir_lemma)
+            if inline:
+                redirect_inline.setdefault(key, inline)
+        elif inline:
+            index[key] = inline
 
     folded: dict[str, tuple[str, str]] = {}
     for key, gloss in index.items():
         lang, term = key.split("\t", 1)
         folded.setdefault(f"{lang}\t{_fold_macrons(term)}", (term, gloss))
 
+    # Redirect pending can chain through other redirects and grammatical forms.
+    all_pending = {**pending, **pending_redirect}
+
     lemmas: dict[str, str] = {}
     for key, lemma in pending.items():
         if key in index:
             continue
         lang, term = key.split("\t", 1)
-        resolved = _resolve_lemma_gloss(lang, lemma, index, pending, folded)
+        resolved = _resolve_lemma_gloss(lang, lemma, index, all_pending, folded)
         if not resolved:
             continue
         canon, gloss = resolved
         index[key] = gloss
         if canon != term:
             lemmas[key] = canon
+
+    for key, lemma in pending_redirect.items():
+        if key in index:
+            continue
+        lang, term = key.split("\t", 1)
+        resolved = _resolve_lemma_gloss(lang, lemma, index, all_pending, folded)
+        if resolved:
+            _canon, gloss = resolved
+            index[key] = gloss
+            # Intentionally omit from lemma_index: keep surface form in the gold graph.
+            continue
+        inline = redirect_inline.get(key)
+        if inline:
+            index[key] = inline
+
     return index, lemmas, parents
 
 
@@ -439,7 +588,15 @@ def index_glosses(
 
 
 def gloss_for(index: dict[str, str], lang: str, term: str) -> str | None:
-    return index.get(f"{lang}\t{term}")
+    """Look up a lexical gloss, unwrapping leftover redirect stubs from old indexes."""
+    gloss = index.get(f"{lang}\t{term}")
+    if not gloss:
+        return None
+    if is_redirect_gloss(gloss):
+        return _unwrap_redirect_text(index, lang, gloss)
+    if is_grammatical_gloss(gloss):
+        return None
+    return gloss
 
 
 def lemma_for(lemmas: dict[str, str], lang: str, term: str) -> str | None:

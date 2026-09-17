@@ -6,9 +6,11 @@ import pytest
 from etl.derive import (
     etymology_parent_terms,
     first_gloss,
+    gloss_for,
     index_gloss_objects,
     is_grammatical_gloss,
     is_junk_term,
+    is_redirect_gloss,
     reduce_edges,
 )
 from etl.generate import (
@@ -16,11 +18,13 @@ from etl.generate import (
     build_graph,
     extract_candidates,
     gloss_overlap,
+    involves_english,
     is_proper_noun_leaf,
     leaf_reuse_key,
     leaf_shares_lca_label,
     make_choices,
     normalize_label,
+    prepare_score_buckets,
     quality_score,
     still_same_meaning,
 )
@@ -103,6 +107,24 @@ def test_first_gloss_skips_grammatical_forms_without_form_of():
             ]
         }
     ) is None
+    assert first_gloss({"senses": [{"glosses": ["alternative form of foo"]}]}) is None
+    assert first_gloss({"senses": [{"glosses": ["synonym of bar"]}]}) is None
+    assert first_gloss(
+        {
+            "senses": [
+                {
+                    "glosses": [
+                        "One of a number of alternative forms of the same gene occupying a given position."
+                    ]
+                }
+            ]
+        }
+    ) == ("One of a number of alternative forms of the same gene occupying a given position.")
+    assert not is_redirect_gloss(
+        "One of a number of alternative forms of the same gene occupying a given position."
+    )
+    assert is_redirect_gloss("Alternative form of acromegaly.")
+    assert is_redirect_gloss("synonym of canō (“to sing”)")
     assert (
         first_gloss({"senses": [{"glosses": ["masculine, male (of humans or animals)"]}]})
         == "masculine, male (of humans or animals)"
@@ -148,6 +170,21 @@ def test_index_glosses_inherits_form_only_lemma():
                 "word": "supero",
                 "senses": [{"glosses": ["to overcome, surpass"]}],
             },
+            {
+                "lang": "Old French",
+                "word": "amirail",
+                "senses": [{"glosses": ["alternative form of amiral"]}],
+            },
+            {
+                "lang": "Old French",
+                "word": "amiral",
+                "senses": [{"glosses": ["naval commander"]}],
+            },
+            {
+                "lang": "Latin",
+                "word": "lacertus",
+                "senses": [{"glosses": ["alternative form of lacerta: a lizard"]}],
+            },
         ]
     )
     assert glosses["Latin\taddō"] == "to add, attach, join"
@@ -155,6 +192,18 @@ def test_index_glosses_inherits_form_only_lemma():
     assert lemmas["Latin\taddere"] == "addō"
     assert glosses["Latin\tsuperare"] == "to overcome, surpass"
     assert lemmas["Latin\tsuperare"] == "supero"
+    assert glosses["Old French\tamirail"] == "naval commander"
+    assert "Old French\tamirail" not in lemmas
+    assert glosses["Latin\tlacertus"] == "a lizard"
+    assert "Latin\tlacertus" not in lemmas
+    assert gloss_for(glosses, "Old French", "amirail") == "naval commander"
+    # Leftover stub in an old index is unwrapped at lookup time.
+    stale = dict(glosses)
+    stale["English\tacromegalia"] = "Alternative form of acromegaly."
+    stale["English\tacromegaly"] = "abnormal growth of the extremities"
+    assert gloss_for(stale, "English", "acromegalia") == "abnormal growth of the extremities"
+    assert gloss_for(stale, "English", "missing") is None
+    assert gloss_for({"English\tstub": "alternative form of nowhere"}, "English", "stub") is None
 
 
 def test_index_glosses_keeps_lexical_homograph_not_lemma():
@@ -450,7 +499,14 @@ def test_make_choices_requires_real_distractors():
     assert make_choices("ancestor gloss", ["only one other"], n_choices=4, rng=rng) is None
     built = make_choices(
         "ancestor gloss",
-        ["sense a", "sense b", "sense c", "ancestor gloss"],
+        [
+            "sense a",
+            "sense b",
+            "sense c",
+            "ancestor gloss",
+            "alternative form of cappa",
+            "synonym of canō",
+        ],
         n_choices=4,
         rng=rng,
     )
@@ -460,6 +516,7 @@ def test_make_choices_requires_real_distractors():
     assert len(glosses) == 4
     assert len(set(glosses)) == 4
     assert all(not g.startswith("(unrelated)") for g in glosses)
+    assert all(not is_redirect_gloss(g) for g in glosses)
     assert choices[[choice["id"] for choice in choices].index(correct_id)]["gloss"] == "ancestor gloss"
 
 
@@ -501,14 +558,100 @@ def _synth_shift_graph(n_leaves: int, shared_ancestors: int = 20, *, include_pro
 
 
 def test_extract_candidates_early_exit_respects_limit():
+    import random as random_mod
+
     g, glosses, cfg = _synth_shift_graph(400, shared_ancestors=10)
     funnel = Funnel()
-    cands = extract_candidates(g, glosses, cfg, funnel, limit=10, min_quality=3)
+    rng = random_mod.Random(1)
+    cands = extract_candidates(g, glosses, cfg, funnel, limit=10, min_quality=3, rng=rng)
     assert len(cands) >= 10
-    assert sum(1 for c in cands if c["quality_score"] >= 3) >= 10
+    quality = [c for c in cands if c["quality_score"] >= 3]
+    assert len(quality) >= 10
     assert funnel.counts.get("early_exit", 0) == 1
     # Without early exit this graph considers tens of thousands of related pairs.
     assert funnel.counts["pairs_considered"] < 5000
+    # Per-bucket headroom: finite limit must still pull non-English pairs, not only de-en.
+    assert any(involves_english(c) for c in quality)
+    assert any(not involves_english(c) for c in quality)
+
+    # Emit buckets: seeded shuffle + English/other water-fill (not alpha A-words first).
+    # Simulate leaf-reuse greedily over prepared buckets.
+    en_terms_alpha = sorted(
+        {
+            c["leaf_a"]["term"] if c["leaf_a"]["lang"] == "English" else c["leaf_b"]["term"]
+            for c in quality
+            if involves_english(c)
+        }
+    )
+    assert en_terms_alpha, "expected English-involving quality candidates"
+
+    def _simulate_emit(seed: int, n: int = 20) -> list[dict]:
+        buckets = prepare_score_buckets(quality, random_mod.Random(seed))
+        used: set[str] = set()
+        out: list[dict] = []
+        for en_bucket, other_bucket in buckets:
+            en_i = other_i = 0
+            emitted_en = emitted_other = 0
+            while en_i < len(en_bucket) or other_i < len(other_bucket):
+                if len(out) >= n:
+                    break
+                prefer_en = emitted_en <= emitted_other
+
+                def _take(cand: dict) -> bool:
+                    ka = leaf_reuse_key(cand["leaf_a"]["lang"], cand["leaf_a"]["term"])
+                    kb = leaf_reuse_key(cand["leaf_b"]["lang"], cand["leaf_b"]["term"])
+                    if ka in used or kb in used:
+                        return False
+                    used.add(ka)
+                    used.add(kb)
+                    out.append(cand)
+                    return True
+
+                if prefer_en and en_i < len(en_bucket):
+                    if _take(en_bucket[en_i]):
+                        emitted_en += 1
+                    en_i += 1
+                elif other_i < len(other_bucket):
+                    if _take(other_bucket[other_i]):
+                        emitted_other += 1
+                    other_i += 1
+                elif en_i < len(en_bucket):
+                    if _take(en_bucket[en_i]):
+                        emitted_en += 1
+                    en_i += 1
+                else:
+                    break
+            if len(out) >= n:
+                break
+        return out
+
+    batch = _simulate_emit(1, n=20)
+    en_n = sum(1 for c in batch if involves_english(c))
+    other_n = len(batch) - en_n
+    assert en_n >= 1 and other_n >= 1
+    assert abs(en_n - other_n) <= 1
+
+    first_en = next(
+        (
+            c["leaf_a"]["term"] if c["leaf_a"]["lang"] == "English" else c["leaf_b"]["term"]
+            for c in batch
+            if involves_english(c)
+        ),
+        None,
+    )
+    assert first_en is not None
+    # A-words must not lead: first emitted English leaf is not the alphabetically first.
+    assert first_en != en_terms_alpha[0] or len(en_terms_alpha) == 1
+
+    pairs_s1 = {
+        tuple(sorted([(c["leaf_a"]["lang"], c["leaf_a"]["term"]), (c["leaf_b"]["lang"], c["leaf_b"]["term"])]))
+        for c in _simulate_emit(1, n=20)
+    }
+    pairs_s2 = {
+        tuple(sorted([(c["leaf_a"]["lang"], c["leaf_a"]["term"]), (c["leaf_b"]["lang"], c["leaf_b"]["term"])]))
+        for c in _simulate_emit(2, n=20)
+    }
+    assert pairs_s1 != pairs_s2
 
 
 def test_extract_candidates_skips_proper_noun_leaves():
@@ -631,6 +774,26 @@ def test_extract_candidates_rewrites_form_only_lca_to_lemma():
     assert "Latin:addere" not in cands[0]["nodes"]
     assert "Latin:addō" in cands[0]["nodes"]
 
+    # Alt-form LCAs keep the surface spelling; only the meaning is inherited.
+    # lemma_index must not rewrite amirail → amiral.
+    rows_alt = [
+        dict(term="admiral", lang="English", reltype="derived_from", related_term="amirail", related_lang="Old French"),
+        dict(term="Admiral", lang="German", reltype="derived_from", related_term="amirail", related_lang="Old French"),
+    ]
+    glosses_alt = {
+        "English\tadmiral": "fleet flag officer in modern navies",
+        "German\tAdmiral": "high ranking sea officer",
+        "Old French\tamirail": "commander of a medieval fleet",
+        "Old French\tamiral": "commander of a medieval fleet",
+    }
+    g_alt = build_graph(pd.DataFrame(rows_alt), {"derived_from"})
+    funnel_alt = Funnel()
+    cands_alt = extract_candidates(g_alt, glosses_alt, cfg, funnel_alt, lemmas={})
+    assert len(cands_alt) == 1
+    assert cands_alt[0]["lca"]["term"] == "amirail"
+    assert cands_alt[0]["lca"]["gloss"] == "commander of a medieval fleet"
+    assert cands_alt[0]["lca"]["id"] == "Old French:amirail"
+
 
 def test_extract_candidates_keeps_lexical_homograph_lca():
     """factum with a noun gloss is not rewritten to faciō."""
@@ -665,6 +828,7 @@ def test_extract_candidates_keeps_lexical_homograph_lca():
     [
         ("fare", "second-person singular present active indicative of for"),
         ("huper", "[with genitive]"),
+        ("amirail", "alternative form of missing"),
     ],
 )
 def test_extract_candidates_rejects_leftover_grammatical_lca_gloss(lca_term, lca_gloss):
@@ -681,7 +845,11 @@ def test_extract_candidates_rejects_leftover_grammatical_lca_gloss(lca_term, lca
     funnel = Funnel()
     cands = extract_candidates(g, glosses, _two_leaf_lca_cfg(), funnel)
     assert cands == []
-    assert funnel.counts.get("inflection_lca", 0) >= 1
+    # Grammatical leftovers use inflection_lca; unresolved redirects become no_gloss.
+    assert (
+        funnel.counts.get("inflection_lca", 0) >= 1
+        or funnel.counts.get("no_gloss", 0) >= 1
+    )
     assert funnel.counts.get("candidates", 0) == 0
 
 

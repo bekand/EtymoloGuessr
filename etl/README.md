@@ -61,9 +61,9 @@ A full refresh is tens of minutes and hundreds of MB. The usual loop is `generat
 ## Pipeline stages
 
 1. **Reduce graph** — keep leaf langs English / Spanish / Portuguese / German and the ancestor allowlist in config; keep `inherited_from`, `borrowed_from`, `derived_from`, `root`, `cognate_of`, `doublet_with`; drop null related terms, multiword junk, affixes.
-2. **Index glosses** — first *lexical* gloss per `(lang, term)` (skip `form_of` / grammatical-form senses; strip Wiktionary case-government labels like `[with genitive]`). Form-only entries inherit the citation lemma’s gloss and are recorded in `lemma_index.json`. Puzzles with no LCA gloss are skipped (`no_gloss`).
+2. **Index glosses** — first *lexical* gloss per `(lang, term)` (skip `form_of` / grammatical-form senses and Wiktionary redirect stubs like `alternative form of …` / `synonym of …`; strip Wiktionary case-government labels like `[with genitive]`). Form-only grammatical entries inherit the citation lemma’s gloss and are recorded in `lemma_index.json` (so LCAs can be rewritten to that lemma). Redirect-only entries inherit the target’s meaning **without** a `lemma_index` entry (surface spelling stays in the gold graph). Puzzles with no LCA gloss are skipped (`no_gloss`).
 3. **Extract puzzles** — two modern leaves and their closest connecting subgraph / LCA (at most 9 nodes; `too_big` otherwise), prefer cross-language via quality score, rewrite form-only LCAs to the citation lemma (`Latin:addere` → `Latin:addō`), reject leftover grammatical-form glosses (`inflection_lca`), reject pairs where a leaf term or gloss is identical to the LCA term or gloss (`lca_equals_leaf`), reject pairs where both leaf terms still appear in the ancestor gloss, reject LCA terms shorter than 3 characters (`lca_term_too_short`), 4-way multiple-choice from other LCA glosses.
-4. **Ids** — SHA-256 of `(leaf_a, leaf_b, lca, gold edges)` so `etl load` upserts instead of duplicating. `generate --db` truncates first, then upserts. `--seed` controls sampling and choice shuffle.
+4. **Ids** — SHA-256 of `(leaf_a, leaf_b, lca, gold edges)` so `etl load` upserts instead of duplicating. `generate --db` truncates first, then upserts. `--seed` shuffles English/non-English emit buckets (pair selection) and multiple-choice options.
 
 Walks toward ancestors use `inherited_from` / `borrowed_from` / `derived_from` / `root` only.
 
@@ -84,9 +84,10 @@ Same-language pairs top out at **2**, so the default `--min-quality` of **4** dr
 
 - **Proper nouns** — English / Spanish / Portuguese leaves whose term starts with an uppercase letter are skipped (`proper_noun_leaf`). German is exempt (common nouns are capitalized).
 - **Short / unglossed LCA** — LCA terms shorter than 3 characters are skipped (`lca_term_too_short`); missing LCA gloss uses existing `no_gloss`.
-- **Form-only LCA** — if the closest ancestor is only a grammatical form (infinitive, supine, inflected case, …) and Wiktionary points at a citation lemma, the gold node is replaced by that lemma and the multiple-choice answer uses the lemma’s meaning. Homographs with a real lexical sense (Latin *factum* “deed”) are left alone. Glosses that still look like `accusative … of …` or `[with genitive]` are rejected (`inflection_lca`).
+- **Form-only LCA** — if the closest ancestor is only a grammatical form (infinitive, supine, inflected case, …) and Wiktionary points at a citation lemma, the gold node is replaced by that lemma and the multiple-choice answer uses the lemma’s meaning. Homographs with a real lexical sense (Latin *factum* “deed”) are left alone. Glosses that still look like `accusative … of …` or `[with genitive]` are rejected (`inflection_lca`). Redirect stubs (`alternative form of …`, `synonym of …`, …) inherit the target lemma’s meaning at index/lookup time but **do not** rewrite the gold node spelling (Old French *amirail* stays *amirail*). Unresolved redirects are dropped via `no_gloss` / `no_gloss_leaf` and never used as distractors.
 - **Leaf = LCA** — if either leaf’s term or gloss equals the LCA term or gloss (case-insensitive; reconstruction `*` ignored), skip (`lca_equals_leaf`).
 - **Leaf reuse** — within one `generate` batch, each `(lang, term)` may appear as a leaf in at most one emitted puzzle (`leaf_reuse`), so `--n 10` does not repeat the same word ten times.
+- **English vs non-English emit** — after quality filter, candidates are split into English-involving vs other pairs, each bucket is seed-shuffled, then water-filled so `de-en` A-words do not lock shared leaves before `de-es` / `es-pt` / … Extraction also shuffles leaves within each ancestor group and (for finite `--n`) keeps walking until both buckets have headroom.
 - **Distractors** — multiple-choice options come from other candidates’ LCA glosses. If fewer than `n_choices - 1` distinct real glosses are available, the candidate is rejected (`insufficient_distractors`); placeholders are never emitted.
 
 ## Commands
@@ -128,7 +129,7 @@ Flags:
 | Flag | Meaning |
 |---|---|
 | `--n N` | Max puzzles. Default from `config.yaml` (`generate.n`, currently 0). `0` = emit every survivor |
-| `--seed` | Sampling and choice shuffle (default `generate.seed`) |
+| `--seed` | Shuffle English/non-English emit buckets (pair selection) and MC choices (default `generate.seed`) |
 | `--lang-pair` | Repeatable filter, codes like `en-de` (sorted alphabetically) |
 | `--min-quality` | Drop candidates below this integer score (default `generate.min_quality`, currently 4) |
 | `--stdout` / `--jsonl PATH` / `--db` | Mutually exclusive sinks |

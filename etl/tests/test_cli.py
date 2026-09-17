@@ -65,6 +65,15 @@ def test_refresh_fixtures_generate_validate_inspect(data_home: Path):
             assert key not in seen_leaves
             seen_leaves.add(key)
 
+    # English vs non-English balance: not an all-English-pair prefix.
+    involves = [
+        p["leaf_a"]["lang"] == "English" or p["leaf_b"]["lang"] == "English" for p in puzzles
+    ]
+    if any(involves) and not all(involves):
+        # Mixed catalog: first half should not be exclusively English-involving.
+        half = max(1, len(puzzles) // 2)
+        assert not all(involves[:half])
+
     result = runner.invoke(app, ["validate"])
     assert result.exit_code == 0, result.output
 
