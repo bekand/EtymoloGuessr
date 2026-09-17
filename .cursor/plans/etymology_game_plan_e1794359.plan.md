@@ -245,9 +245,9 @@ These are settled. Do not silently revert them.
 
 Backend language (Go, not Python/Elixir/Spring) is unchanged. Alternatives considered in the original plan still stand if this is ever revisited.
 
-## Next goal: Railway (JSONL in-process)
+## Production shape: Railway (JSONL in-process) — code on main
 
-**ETL stays off the cloud.** Pregenerate locally to JSONL. Production loads that file into the Go process (`go:embed` or `PUZZLES_PATH`). Do not add Redis, SQLite `:memory:`, or another in-memory database product — promote the test `memStore`. Parsed RAM is tens of MB on a 512 MB box.
+**ETL stays off the cloud.** Pregenerate locally to JSONL. Production loads that file into the Go process (`go:embed` or `PUZZLES_PATH`). Do not add Redis, SQLite `:memory:`, or another in-memory database product — promote the test `memStore` / catalog store. Parsed RAM is tens of MB on a 512 MB box.
 
 `users` / `scores` stay unused. `etl disable` / `generate --db` / `load` stay local. Gold is already in JSONL; GET still strips it. Shipping the file in the image is the same secret-model as shipping the table.
 
