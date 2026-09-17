@@ -50,7 +50,6 @@ export function IndexCard({
       {placeholder && !term ? (
         <div className="empty">
           <span className="emptyRule" />
-          <span className="emptyRule" />
         </div>
       ) : null}
       {hasGloss ? (
