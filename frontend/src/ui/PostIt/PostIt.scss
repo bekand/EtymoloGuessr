@@ -48,7 +48,8 @@ $tones: (
   .marker {
     position: absolute;
     top: var(--space-2);
-    left: var(--space-2);
+    right: var(--space-2);
+    left: auto;
     display: grid;
     place-items: center;
     min-width: 1.15rem;
