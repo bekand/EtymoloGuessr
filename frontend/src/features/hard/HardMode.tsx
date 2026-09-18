@@ -12,6 +12,7 @@ import './HardMode.scss'
 export function HardMode() {
   const canvasRef = useRef<HardCanvasHandle>(null)
   const [allPlaced, setAllPlaced] = useState(false)
+  const [placedCount, setPlacedCount] = useState(0)
   const { settling, onAnimationEnd } = useSettlingClip()
   const {
     puzzle,
@@ -47,8 +48,15 @@ export function HardMode() {
 
   function handleNext() {
     setAllPlaced(false)
+    setPlacedCount(0)
     next()
   }
+
+  const progressText = graph
+    ? allPlaced
+      ? 'All cards placed'
+      : `${placedCount}/${graph.nodes.length} cards placed`
+    : 'Waiting for cards'
 
   return (
     <Sheet
@@ -60,9 +68,12 @@ export function HardMode() {
       <PlayHeader mode="hard" streak={streak} />
 
       {revealing ? null : (
-        <p className="instruction">
-          Place every card on the blotter, then draw lines from descendant to ancestor.
-        </p>
+        <>
+          <p className="instruction">
+            Place every card on the blotter, then draw lines from descendant to ancestor.
+          </p>
+          <p className="statusLine" aria-live="polite">{progressText}</p>
+        </>
       )}
 
       {revealing ? (
@@ -86,6 +97,7 @@ export function HardMode() {
               leafB={puzzle?.leafB}
               disabled={solveMutation.isPending}
               onAllPlacedChange={setAllPlaced}
+              onPlacedCountChange={setPlacedCount}
             />
           ) : null}
 

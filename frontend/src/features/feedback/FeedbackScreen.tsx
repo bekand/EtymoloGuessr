@@ -38,7 +38,9 @@ export function FeedbackScreen({ mode, result, leafA, leafB, onNext }: FeedbackS
           {result?.correct ? 'Correct! ' : "Unfortunately, that's not correct..."}
         </p>
       ) : (
-        <p className="verdict pending">Checking the archive…</p>
+        <p className="verdict pending" aria-live="polite">
+          Checking the archive…
+        </p>
       )}
       {ready ? (
         showAncestors ? (

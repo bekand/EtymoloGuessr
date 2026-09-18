@@ -108,6 +108,8 @@ export function MediumMode() {
         ? 'Submit when you are sure.'
         : 'Pair all eight words.'
 
+  const progressText = `${pairs.length}/4 pairs matched`
+
   function resetBoard() {
     setPairs([])
     setPendingId(null)
@@ -167,6 +169,7 @@ export function MediumMode() {
     return (
       <section className="board" aria-label="Word tiles">
         <p className="instruction">Pair the words that share a common ancestor.</p>
+        <p className="statusLine" aria-live="polite">{progressText}</p>
         <div className="notes">
           {leaves.map((leaf) => {
             const state = noteStateFor(leaf.id, pairs, pendingId, pendingSlot)

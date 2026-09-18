@@ -42,6 +42,15 @@
     @include mx.flex-col-center(var(--space-3));
   }
 
+  .statusLine {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+  }
+
   .sectionLabel {
     @include mx.mono-kicker;
   }

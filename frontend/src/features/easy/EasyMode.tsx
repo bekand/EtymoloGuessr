@@ -47,6 +47,8 @@ export function EasyMode() {
         ? 'Submit when you are sure.'
         : 'Pick an answer!'
 
+  const progressText = selectedId ? 'Choice selected' : 'Choose one'
+
   function handleNext() {
     setSelectedId(null)
     setExplainOpen(null)
@@ -91,7 +93,7 @@ export function EasyMode() {
   function renderChoices() {
     return (
       <section className="choices" aria-label="Meaning choices">
-        <p className="sectionLabel">Choose one</p>
+        <p className="sectionLabel">{progressText}</p>
         <div className="notes">
           {choices.map((choice, index) => {
             const marker = CHOICE_MARKERS[index] ?? String(index + 1)

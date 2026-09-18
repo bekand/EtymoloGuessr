@@ -79,7 +79,6 @@
     font-weight: 400;
     line-height: 1.35;
     color: var(--ink-muted);
-    max-width: 22ch;
   }
 
   .actions {
@@ -97,12 +96,22 @@
     }
   }
 
-  .note {
+  .modeSummary {
     margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: var(--space-2);
     font-family: var(--font-mono);
     font-size: var(--text-xs);
     letter-spacing: 0.04em;
     color: var(--ink-faint);
+    text-align: left;
+
+    strong {
+      color: var(--ink);
+      font-weight: 600;
+    }
   }
 
   .colophon {

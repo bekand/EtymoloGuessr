@@ -57,6 +57,7 @@ type HardCanvasProps = {
   leafB?: Term
   disabled?: boolean
   onAllPlacedChange?: (allPlaced: boolean) => void
+  onPlacedCountChange?: (count: number) => void
   ref?: Ref<HardCanvasHandle>
 }
 
@@ -139,6 +140,7 @@ function HardCanvasBoard({
   leafB,
   disabled,
   onAllPlacedChange,
+  onPlacedCountChange,
   canvasRef,
 }: Omit<HardCanvasProps, 'ref'> & { canvasRef?: Ref<HardCanvasHandle> }) {
   const { screenToFlowPosition, fitView, getEdges, getNodes } = useReactFlow()
@@ -157,7 +159,8 @@ function HardCanvasBoard({
 
   useEffect(() => {
     onAllPlacedChange?.(allPlaced)
-  }, [allPlaced, onAllPlacedChange])
+    onPlacedCountChange?.(nodes.length)
+  }, [allPlaced, nodes.length, onAllPlacedChange, onPlacedCountChange])
 
   useImperativeHandle(
     canvasRef,

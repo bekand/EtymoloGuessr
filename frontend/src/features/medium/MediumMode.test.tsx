@@ -62,6 +62,7 @@ describe('MediumMode', () => {
 
     expect(await screen.findByText('father')).toBeInTheDocument()
     expect(screen.getByText('Medium', { selector: '.modeLabel' })).toBeInTheDocument()
+    expect(screen.getByText('0/4 pairs matched')).toBeInTheDocument()
     expect(screen.getByText('|Streak: 0')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Submit pairs' })).toHaveClass('blue')
     expect(screen.getByLabelText('Word tiles').querySelectorAll('button')).toHaveLength(8)

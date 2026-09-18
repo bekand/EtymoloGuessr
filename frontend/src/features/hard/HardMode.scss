@@ -13,6 +13,16 @@
     color: var(--ink-muted);
   }
 
+  .statusLine {
+    margin: 0 auto var(--space-2);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    text-align: center;
+  }
+
   .hardPlay {
     display: grid;
     grid-template-columns: minmax(11rem, 16rem) minmax(0, 1fr);
