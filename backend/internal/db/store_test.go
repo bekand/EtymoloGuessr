@@ -78,6 +78,43 @@ func TestStoreMinNodesFilter(t *testing.T) {
 	}
 }
 
+func TestStoreRandomPuzzles(t *testing.T) {
+	pool := dbtest.Open(t)
+	store := db.NewStore(pool)
+	for i, sample := range []*puzzle.Puzzle{
+		mediumSample("mp1", "English", "father", "German", "Vater"),
+		mediumSample("mp2", "English", "hound", "German", "Hund"),
+		mediumSample("mp3", "English", "gift", "German", "Gift"),
+		mediumSample("mp4", "English", "house", "German", "Haus"),
+		mediumSample("mp5", "English", "water", "German", "Wasser"),
+	} {
+		_ = i
+		dbtest.Insert(t, pool, sample)
+	}
+
+	got, err := store.RandomPuzzles(context.Background(), puzzle.Filter{}, 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 4 {
+		t.Fatalf("got %d", len(got))
+	}
+	seen := map[string]bool{}
+	for _, p := range got {
+		if seen[p.ID] {
+			t.Fatalf("duplicate %s", p.ID)
+		}
+		seen[p.ID] = true
+	}
+}
+
+func mediumSample(id, aLang, aTerm, bLang, bTerm string) *puzzle.Puzzle {
+	p := dbtest.Sample(id, 3, true, "de-en", 5)
+	p.LeafA = []byte(`{"lang":"` + aLang + `","term":"` + aTerm + `"}`)
+	p.LeafB = []byte(`{"lang":"` + bLang + `","term":"` + bTerm + `"}`)
+	return p
+}
+
 func TestMigrateIdempotent(t *testing.T) {
 	pool := dbtest.Open(t)
 	if err := db.Migrate(context.Background(), pool); err != nil {

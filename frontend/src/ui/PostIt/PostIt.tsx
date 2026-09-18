@@ -12,7 +12,7 @@ function randomTiltDeg() {
   return (unit < 0.5 ? -1 : 1) * magnitude
 }
 
-type PostItTone = 'yellow' | 'pink' | 'blue' | 'green'
+type PostItTone = 'yellow' | 'pink' | 'blue' | 'green' | 'white'
 
 type PostItProps = {
   children?: ReactNode

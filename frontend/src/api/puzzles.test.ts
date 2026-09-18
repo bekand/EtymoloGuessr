@@ -4,11 +4,12 @@ import { ApiError } from '@/api/client'
 import {
   fetchLockedRandomEasy,
   fetchLockedRandomHard,
+  fetchLockedRandomMedium,
   readPuzzleLock,
   solveEasyPuzzle,
   writePuzzleLock,
 } from '@/api/puzzles'
-import { easyPrompt, hardPrompt } from '@/test/fixtures'
+import { easyPrompt, hardPrompt, mediumPrompt } from '@/test/fixtures'
 import { server } from '@/test/mswServer'
 
 afterEach(() => {
@@ -68,5 +69,30 @@ describe('puzzle lock', () => {
     )
     await expect(solveEasyPuzzle(easyPrompt.id, 'c0')).rejects.toBeInstanceOf(ApiError)
     expect(readPuzzleLock('easy')).toBeNull()
+  })
+
+  it('refetches a medium lock and rejects wrong leaf counts', async () => {
+    writePuzzleLock('medium', { ...mediumPrompt, leaves: mediumPrompt.leaves.slice(0, 4) })
+    expect(readPuzzleLock('medium')).toBeNull()
+
+    writePuzzleLock('medium', mediumPrompt)
+    const seen: string[] = []
+    server.use(
+      http.get(/\/puzzles\/random/, () => {
+        seen.push('random')
+        return HttpResponse.json(mediumPrompt)
+      }),
+      http.get(/\/puzzles\/(?!random)([^/?]+)/, ({ request }) => {
+        const id = decodeURIComponent(new URL(request.url).pathname.split('/').pop() ?? '')
+        seen.push(id)
+        return HttpResponse.json({ ...mediumPrompt, id })
+      }),
+    )
+
+    const live = await fetchLockedRandomMedium()
+    expect(live.id).toBe(mediumPrompt.id)
+    expect(live.leaves).toHaveLength(8)
+    expect(seen).toEqual([mediumPrompt.id])
+    expect(readPuzzleLock('medium')?.leaves).toHaveLength(8)
   })
 })

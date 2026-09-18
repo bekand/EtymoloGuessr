@@ -102,6 +102,10 @@
     color: var(--stamp-green);
   }
 
+  &.blue {
+    color: var(--stamp-blue);
+  }
+
   &.md {
     .plate {
       min-width: 5.75rem;

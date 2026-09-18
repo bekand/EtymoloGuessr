@@ -13,17 +13,19 @@
   --ink-blue: #1a3d5c;
   --rule: #cfc4b2;
 
+  /* Stamp — primary actions, used sparingly */
+  --stamp-black: var(--ink);
+  --stamp-green: #215a3c;
+  --stamp-red: #7a2424;
+  --stamp-blue: #1a3d5c;
+  --stamp-red-soft: rgba(122, 36, 36, 0.14);
+
   /* Post-it accents — low saturation */
   --note-yellow: #efe4ad;
   --note-pink: #edd0cc;
   --note-blue: #d0dde3;
   --note-green: #d3dec4;
-
-  /* Stamp — primary actions, used sparingly */
-  --stamp-black: var(--ink);
-  --stamp-green: #215a3c;
-  --stamp-red: #7a2424;
-  --stamp-red-soft: rgba(122, 36, 36, 0.14);
+  --note-white: #f5f1e8;
 
   /* Type */
   --font-mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Code', monospace;

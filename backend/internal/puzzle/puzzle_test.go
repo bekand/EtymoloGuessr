@@ -1,6 +1,9 @@
 package puzzle
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
 func sampleGraph() Graph {
 	lcaGloss := "father"
@@ -14,6 +17,16 @@ func sampleGraph() Graph {
 			{From: "English:father", To: "Proto-Germanic:*fader"},
 			{From: "German:Vater", To: "Proto-Germanic:*fader"},
 		},
+	}
+}
+
+func TestParseMode(t *testing.T) {
+	m, err := ParseMode("medium")
+	if err != nil || m != ModeMedium {
+		t.Fatalf("medium: %v %q", err, m)
+	}
+	if _, err := ParseMode("expert"); err == nil {
+		t.Fatal("expert should be invalid")
 	}
 }
 
@@ -87,5 +100,106 @@ func TestChoiceCorrect(t *testing.T) {
 	}
 	if ChoiceCorrect(nil, "c0") || ChoiceCorrect(p, "") {
 		t.Fatal("nil puzzle or empty id should be incorrect")
+	}
+}
+
+func TestRootAncestor(t *testing.T) {
+	t.Run("single root", func(t *testing.T) {
+		term, ok := RootAncestor(sampleGraph())
+		if !ok {
+			t.Fatal("expected root")
+		}
+		if term.Lang != "Proto-Germanic" || term.Term != "*fader" {
+			t.Fatalf("got %+v", term)
+		}
+	})
+	t.Run("lowest id among roots", func(t *testing.T) {
+		g := Graph{
+			Nodes: []Node{
+				{ID: "z-root", Lang: "Latin", Term: "z"},
+				{ID: "a-root", Lang: "Latin", Term: "a"},
+				{ID: "leaf", Lang: "English", Term: "x", Role: "leaf"},
+			},
+			Edges: []Edge{},
+		}
+		term, ok := RootAncestor(g)
+		if !ok || term.Term != "a" {
+			t.Fatalf("want lowest id root a, got ok=%v %+v", ok, term)
+		}
+	})
+}
+
+func TestPairSetsEqual(t *testing.T) {
+	gold := [][2]string{{"a", "b"}, {"c", "d"}}
+	ok := [][2]string{{"d", "c"}, {"b", "a"}}
+	if !PairSetsEqual(gold, ok) {
+		t.Fatal("unordered pairs should match")
+	}
+	wrong := [][2]string{{"a", "b"}, {"a", "c"}}
+	if PairSetsEqual(gold, wrong) {
+		t.Fatal("wrong pairing should not match")
+	}
+}
+
+func TestLeafTokenOpaque(t *testing.T) {
+	tok := LeafToken("abc123abc123abc123", "a")
+	if tok == "" || len(tok) < 8 {
+		t.Fatalf("token %q", tok)
+	}
+	if stringsHasPrefix(tok, "abc") {
+		t.Fatalf("token should not expose puzzle id prefix: %q", tok)
+	}
+	if LeafToken("abc123abc123abc123", "a") != tok {
+		t.Fatal("token should be stable")
+	}
+	if LeafToken("abc123abc123abc123", "b") == tok {
+		t.Fatal("sides should differ")
+	}
+}
+
+func stringsHasPrefix(s, prefix string) bool {
+	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
+}
+
+func TestMediumSetID(t *testing.T) {
+	id := MediumSetID([]string{"c", "a", "d", "b"})
+	if id != "a,b,c,d" {
+		t.Fatalf("id %q", id)
+	}
+	parts, err := ParseMediumSetID(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(parts) != 4 || parts[0] != "a" {
+		t.Fatalf("parts %#v", parts)
+	}
+	if _, err := ParseMediumSetID("a,b"); err == nil {
+		t.Fatal("short set should fail")
+	}
+}
+
+func TestSelectDistinctLeaves(t *testing.T) {
+	mk := func(id, aLang, aTerm, bLang, bTerm string) *Puzzle {
+		a, _ := json.Marshal(Term{Lang: aLang, Term: aTerm})
+		b, _ := json.Marshal(Term{Lang: bLang, Term: bTerm})
+		return &Puzzle{ID: id, LeafA: a, LeafB: b}
+	}
+	cands := []*Puzzle{
+		mk("1", "English", "father", "German", "Vater"),
+		mk("2", "English", "father", "Spanish", "padre"),
+		mk("3", "English", "hound", "German", "Hund"),
+		mk("4", "English", "gift", "German", "Gift"),
+		mk("5", "English", "house", "German", "Haus"),
+	}
+	picked := SelectDistinctLeaves(cands, 4)
+	if len(picked) != 4 {
+		t.Fatalf("picked %d", len(picked))
+	}
+	ids := map[string]bool{}
+	for _, p := range picked {
+		ids[p.ID] = true
+	}
+	if ids["2"] {
+		t.Fatal("colliding puzzle should be skipped")
 	}
 }

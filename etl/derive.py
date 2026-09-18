@@ -23,13 +23,14 @@ LATIN_FAMILY_LANGS = frozenset(
 )
 
 
-def _fold_macrons(text: str) -> str:
+def fold_macrons(text: str) -> str:
+    """Strip combining marks (macrons, accents) via NFD."""
     decomposed = unicodedata.normalize("NFD", text)
     return "".join(ch for ch in decomposed if unicodedata.category(ch) != "Mn")
 
 
 def _folded_term_key(term: Any) -> str:
-    return _fold_macrons(str(term)).casefold()
+    return fold_macrons(str(term)).casefold()
 
 
 def is_junk_term(term: Any) -> bool:
@@ -165,7 +166,7 @@ def etymology_parent_terms(obj: dict[str, Any]) -> list[str]:
 
 
 def _folded_term_set(terms: Iterable[str]) -> set[str]:
-    return {_fold_macrons(str(t)) for t in terms if t}
+    return {fold_macrons(str(t)) for t in terms if t}
 
 
 def _build_ancestor_successors(
@@ -202,7 +203,7 @@ def _build_latin_family_aliases(
             if node in seen:
                 continue
             seen.add(node)
-            aliases[_fold_macrons(term)].append(node)
+            aliases[fold_macrons(term)].append(node)
     return aliases
 
 
@@ -218,7 +219,7 @@ def _reaches_allowlisted(
     Latin-family nodes with the same folded spelling share successor walks so
     ``Late Latin:apostrŏphus`` can reach Greek via ``Latin:apostrophus``.
     """
-    if _fold_macrons(start_term) in allow_folded:
+    if fold_macrons(start_term) in allow_folded:
         return True
     start = (start_lang, start_term)
     seen: set[tuple[str, str]] = {start}
@@ -229,7 +230,7 @@ def _reaches_allowlisted(
         yield node
         if node[0] not in LATIN_FAMILY_LANGS:
             return
-        for alias in latin_aliases.get(_fold_macrons(node[1]), ()):
+        for alias in latin_aliases.get(fold_macrons(node[1]), ()):
             if alias != node:
                 yield alias
 
@@ -241,7 +242,7 @@ def _reaches_allowlisted(
             for nxt in successors.get(base, ()):
                 if nxt in seen:
                     continue
-                if _fold_macrons(nxt[1]) in allow_folded:
+                if fold_macrons(nxt[1]) in allow_folded:
                     return True
                 seen.add(nxt)
                 q.append(nxt)
@@ -289,7 +290,7 @@ def _align_ancestor_edges(
         for idx, row in grp.iterrows():
             related_term = str(row["related_term"])
             related_lang = str(row["related_lang"])
-            if _fold_macrons(related_term) in allow_folded or _reaches_allowlisted(
+            if fold_macrons(related_term) in allow_folded or _reaches_allowlisted(
                 related_lang,
                 related_term,
                 allow_folded,
@@ -521,7 +522,7 @@ def _lookup_lexical(
         if is_redirect_gloss(gloss) or is_grammatical_gloss(gloss):
             return None
         return term, gloss
-    folded_hit = folded.get(f"{lang}\t{_fold_macrons(term)}")
+    folded_hit = folded.get(f"{lang}\t{fold_macrons(term)}")
     if folded_hit:
         _term, folded_gloss = folded_hit
         if is_redirect_gloss(folded_gloss) or is_grammatical_gloss(folded_gloss):
@@ -651,7 +652,7 @@ def index_gloss_objects(
     folded: dict[str, tuple[str, str]] = {}
     for key, gloss in index.items():
         lang, term = key.split("\t", 1)
-        folded.setdefault(f"{lang}\t{_fold_macrons(term)}", (term, gloss))
+        folded.setdefault(f"{lang}\t{fold_macrons(term)}", (term, gloss))
 
     # Redirect pending can chain through other redirects and grammatical forms.
     all_pending = {**pending, **pending_redirect}
@@ -726,7 +727,7 @@ def gloss_for(index: dict[str, str], lang: str, term: str) -> str | None:
     ``mūsēum`` vs indexed ``museum``.
     """
     langs = (lang, "Latin") if lang in _LATIN_FAMILY_GLOSS_LANGS else (lang,)
-    terms = (term, _fold_macrons(term)) if term != _fold_macrons(term) else (term,)
+    terms = (term, fold_macrons(term)) if term != fold_macrons(term) else (term,)
     gloss = None
     for try_lang in langs:
         for try_term in terms:

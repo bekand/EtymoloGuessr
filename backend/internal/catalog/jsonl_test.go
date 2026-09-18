@@ -56,3 +56,39 @@ func TestDisabledSkipped(t *testing.T) {
 		t.Fatalf("disabled row should be skipped, err=%v", err)
 	}
 }
+
+func TestRandomPuzzlesDistinct(t *testing.T) {
+	store, err := LoadBytes(EmbeddedJSONL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if store.Len() < 4 {
+		t.Skip("embedded catalog too small for medium set")
+	}
+	got, err := store.RandomPuzzles(context.Background(), puzzle.Filter{}, 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 4 {
+		t.Fatalf("got %d", len(got))
+	}
+	seen := map[string]bool{}
+	leaves := map[string]bool{}
+	for _, p := range got {
+		if seen[p.ID] {
+			t.Fatalf("duplicate id %s", p.ID)
+		}
+		seen[p.ID] = true
+		a, errA := puzzle.DecodeTerm(p.LeafA)
+		b, errB := puzzle.DecodeTerm(p.LeafB)
+		if errA != nil || errB != nil {
+			t.Fatalf("decode: %v %v", errA, errB)
+		}
+		for _, key := range []string{puzzle.LeafKey(a), puzzle.LeafKey(b)} {
+			if leaves[key] {
+				t.Fatalf("leaf collision %q", key)
+			}
+			leaves[key] = true
+		}
+	}
+}

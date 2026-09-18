@@ -1,4 +1,4 @@
-import type { PuzzlePrompt, SolveResponse } from '@/api/types'
+import type { MediumPrompt, PuzzlePrompt, SolveResponse } from '@/api/types'
 
 export const easyPrompt: PuzzlePrompt = {
   id: 'p0easy000000000000',
@@ -60,4 +60,39 @@ export const easySolve: SolveResponse = {
       { from: 'German:Vater', to: 'Proto-Germanic:*fader' },
     ],
   },
+}
+
+export const mediumPrompt: MediumPrompt = {
+  id: 'm11111111111111111,m22222222222222222,m33333333333333333,m44444444444444444',
+  mode: 'medium',
+  leaves: [
+    { id: 'tok01', lang: 'English', term: 'father' },
+    { id: 'tok02', lang: 'German', term: 'Vater' },
+    { id: 'tok03', lang: 'English', term: 'hound' },
+    { id: 'tok04', lang: 'German', term: 'Hund' },
+    { id: 'tok05', lang: 'English', term: 'gift' },
+    { id: 'tok06', lang: 'German', term: 'Gift' },
+    { id: 'tok07', lang: 'English', term: 'house' },
+    { id: 'tok08', lang: 'German', term: 'Haus' },
+  ],
+}
+
+export const nextMediumPrompt: MediumPrompt = {
+  ...mediumPrompt,
+  id: 'n11111111111111111,n22222222222222222,n33333333333333333,n44444444444444444',
+  leaves: mediumPrompt.leaves.map((leaf, i) => ({
+    ...leaf,
+    id: `next${i}`,
+    term: `${leaf.term}-next`,
+  })),
+}
+
+export const mediumSolve: SolveResponse = {
+  correct: true,
+  ancestors: [
+    { lang: 'Proto-Germanic', term: '*fader', gloss: 'a male parent' },
+    { lang: 'Proto-Germanic', term: '*hundaz', gloss: 'a dog' },
+    { lang: 'Proto-Germanic', term: '*giftiz', gloss: 'something given' },
+    { lang: 'Proto-Germanic', term: '*hūsą', gloss: 'a dwelling' },
+  ],
 }

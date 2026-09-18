@@ -4,15 +4,22 @@ import {
   clearPuzzleLock,
   fetchLockedRandomEasy,
   fetchLockedRandomHard,
+  fetchLockedRandomMedium,
   isPuzzleNotFound,
   puzzleKeys,
 } from '@/api/puzzles'
-import type { PuzzleMode, PuzzlePrompt, SolveResponse } from '@/api/types'
+import type { MediumPrompt, PuzzleMode, PuzzlePrompt, SolveResponse } from '@/api/types'
 import { useStreak } from '@/utils/streak'
 
-type RandomPuzzleQuery = {
-  queryKey: readonly ['puzzles', 'random', PuzzleMode]
-  queryFn: () => Promise<PuzzlePrompt>
+type PromptByMode = {
+  easy: PuzzlePrompt
+  hard: PuzzlePrompt
+  medium: MediumPrompt
+}
+
+type RandomPuzzleQuery<M extends PuzzleMode> = {
+  queryKey: readonly ['puzzles', 'random', M]
+  queryFn: () => Promise<PromptByMode[M]>
   staleTime: number
   gcTime: number
   refetchOnWindowFocus: false
@@ -26,9 +33,9 @@ const queryDefaults = {
   refetchOnWindowFocus: false,
   refetchOnReconnect: false,
   refetchOnMount: false,
-} as const satisfies Omit<RandomPuzzleQuery, 'queryKey' | 'queryFn'>
+} as const
 
-const randomPuzzleQuery: Record<PuzzleMode, RandomPuzzleQuery> = {
+const randomPuzzleQuery = {
   easy: {
     queryKey: puzzleKeys.randomEasy,
     queryFn: fetchLockedRandomEasy,
@@ -39,17 +46,22 @@ const randomPuzzleQuery: Record<PuzzleMode, RandomPuzzleQuery> = {
     queryFn: fetchLockedRandomHard,
     ...queryDefaults,
   },
-}
+  medium: {
+    queryKey: puzzleKeys.randomMedium,
+    queryFn: fetchLockedRandomMedium,
+    ...queryDefaults,
+  },
+} satisfies { [M in PuzzleMode]: RandomPuzzleQuery<M> }
 
-export function useSolvePuzzle<TVariables>(
-  mode: PuzzleMode,
+export function useSolvePuzzle<M extends PuzzleMode, TVariables>(
+  mode: M,
   mutationFn: (variables: TVariables) => Promise<SolveResponse>,
   onPuzzleGone?: () => void,
 ) {
   const queryClient = useQueryClient()
-  const [gradedPuzzle, setGradedPuzzle] = useState<PuzzlePrompt>()
+  const [gradedPuzzle, setGradedPuzzle] = useState<PromptByMode[M]>()
   const { streak, recordResult } = useStreak(mode)
-  const nextQuery = randomPuzzleQuery[mode]
+  const nextQuery = randomPuzzleQuery[mode] as RandomPuzzleQuery<M>
 
   const solveMutation = useMutation({
     mutationFn,
@@ -72,7 +84,13 @@ export function useSolvePuzzle<TVariables>(
   const revealing = solveMutation.isPending || solved
 
   const puzzleQuery = useQuery({
-    ...nextQuery,
+    queryKey: nextQuery.queryKey,
+    queryFn: nextQuery.queryFn,
+    staleTime: nextQuery.staleTime,
+    gcTime: nextQuery.gcTime,
+    refetchOnWindowFocus: nextQuery.refetchOnWindowFocus,
+    refetchOnReconnect: nextQuery.refetchOnReconnect,
+    refetchOnMount: nextQuery.refetchOnMount,
     enabled: !solved,
   })
 
@@ -80,7 +98,7 @@ export function useSolvePuzzle<TVariables>(
   const loading = !puzzle && puzzleQuery.isPending
   const loadError = !puzzle && puzzleQuery.isError
 
-  function submit(current: PuzzlePrompt, variables: TVariables) {
+  function submit(current: PromptByMode[M], variables: TVariables) {
     setGradedPuzzle(current)
     solveMutation.mutate(variables)
   }

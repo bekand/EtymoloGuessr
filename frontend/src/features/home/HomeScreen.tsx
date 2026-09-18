@@ -15,12 +15,22 @@ export function HomeScreen() {
           <Stamp size="lg" tone="green" onClick={() => navigate('/easy')} aria-label="Play Easy mode">
             Easy
           </Stamp>
+          <Stamp
+            size="lg"
+            tone="blue"
+            onClick={() => navigate('/medium')}
+            aria-label="Play Medium mode"
+          >
+            Medium
+          </Stamp>
           <Stamp size="lg" tone="red" onClick={() => navigate('/hard')} aria-label="Play Hard mode">
             Hard
           </Stamp>
         </div>
         <p className="note">
-          Easy: pick the shared ancestor meaning. <br /> Hard: place every word and draw the family tree.
+          Easy: pick the shared ancestor meaning. <br />
+          Medium: pair the words that share an ancestor. <br />
+          Hard: place every word and draw the family tree.
         </p>
       </Sheet>
       <Colophon />

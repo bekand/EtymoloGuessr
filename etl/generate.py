@@ -4,6 +4,7 @@ import json
 import logging
 import sys
 import time
+import unicodedata
 from collections import Counter, defaultdict, deque
 from pathlib import Path
 from typing import Any, Callable
@@ -13,6 +14,7 @@ import networkx as nx
 from etl.derive import (
     LATIN_FAMILY_LANGS,
     canonical_lemma,
+    fold_macrons,
     gloss_for,
     is_redirect_gloss,
     is_grammatical_gloss,
@@ -140,6 +142,146 @@ def prefer_latin_chain_path(
         leaf_rel = g.edges[leaf_id, lca_id].get("reltype") if g.has_edge(leaf_id, lca_id) else "derived_from"
         g.add_edge(chosen_latin, lca_id, reltype=leaf_rel)
     return [leaf_id, chosen_latin, lca_id]
+
+
+def _term_has_combining_marks(term: str) -> bool:
+    decomposed = unicodedata.normalize("NFD", term)
+    return any(unicodedata.category(ch) == "Mn" for ch in decomposed)
+
+
+def _ancestors_equivalent(
+    lang_a: str,
+    term_a: str,
+    gloss_a: str,
+    lang_b: str,
+    term_b: str,
+    gloss_b: str,
+) -> bool:
+    """True when two ancestors should collapse (same gloss + same-lang or Latin-family twin)."""
+    if gloss_a != gloss_b:
+        return False
+    if lang_a == lang_b:
+        return True
+    if lang_a in LATIN_FAMILY_LANGS and lang_b in LATIN_FAMILY_LANGS:
+        return fold_macrons(term_a).casefold() == fold_macrons(term_b).casefold()
+    return False
+
+
+def _pick_unify_survivor(members: list[str], *, g: nx.DiGraph, lca_id: str) -> str:
+    """Choose which node id survives a same-gloss merge group."""
+
+    def rank(nid: str) -> tuple:
+        data = g.nodes[nid]
+        lang = data.get("lang") or ""
+        term = data.get("term") or ""
+        return (
+            0 if nid == lca_id else 1,
+            0 if lang == "Latin" else 1,
+            0 if _term_has_combining_marks(term) else 1,
+            nid,
+        )
+
+    return min(members, key=rank)
+
+
+def unify_same_gloss_ancestors(
+    node_ids: list[str],
+    edges: list[GraphEdge],
+    *,
+    g: nx.DiGraph,
+    glosses: dict[str, str],
+    leaf_ids: set[str],
+    lca_id: str,
+) -> tuple[list[str], list[GraphEdge], str]:
+    """Collapse ancestor duplicates that share a gloss.
+
+    Merges (1) same-language nodes with the same gloss, and (2) Latin-family
+    nodes with the same macron-folded spelling and gloss. Prefer LCA, then
+    Classical Latin, then diacritic forms.
+    """
+    ancestors: list[str] = []
+    gloss_by_id: dict[str, str] = {}
+    for nid in node_ids:
+        if nid in leaf_ids:
+            continue
+        data = g.nodes[nid]
+        gloss = gloss_for(glosses, data["lang"], data["term"])
+        if not gloss or not str(gloss).strip():
+            continue
+        gloss_by_id[nid] = str(gloss).strip()
+        ancestors.append(nid)
+
+    if len(ancestors) < 2:
+        return node_ids, edges, lca_id
+
+    parent = {nid: nid for nid in ancestors}
+
+    def find(x: str) -> str:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a: str, b: str) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[rb] = ra
+
+    for i, a in enumerate(ancestors):
+        da = g.nodes[a]
+        for b in ancestors[i + 1 :]:
+            db = g.nodes[b]
+            if _ancestors_equivalent(
+                da["lang"],
+                da["term"],
+                gloss_by_id[a],
+                db["lang"],
+                db["term"],
+                gloss_by_id[b],
+            ):
+                union(a, b)
+
+    groups: dict[str, list[str]] = defaultdict(list)
+    for nid in ancestors:
+        groups[find(nid)].append(nid)
+
+    remap: dict[str, str] = {}
+    for members in groups.values():
+        if len(members) < 2:
+            continue
+        survivor = _pick_unify_survivor(members, g=g, lca_id=lca_id)
+        for nid in members:
+            if nid != survivor:
+                remap[nid] = survivor
+
+    if not remap:
+        return node_ids, edges, lca_id
+
+    def map_id(nid: str) -> str:
+        return remap.get(nid, nid)
+
+    new_lca = map_id(lca_id)
+    new_nodes: list[str] = []
+    seen: set[str] = set()
+    for nid in node_ids:
+        mid = map_id(nid)
+        if mid not in seen:
+            seen.add(mid)
+            new_nodes.append(mid)
+
+    new_edges: list[GraphEdge] = []
+    edge_seen: set[tuple[str, str, str | None]] = set()
+    for edge in edges:
+        src, dst = map_id(edge.source), map_id(edge.target)
+        if src == dst:
+            continue
+        key = (src, dst, edge.reltype)
+        if key in edge_seen:
+            continue
+        edge_seen.add(key)
+        new_edges.append(GraphEdge(source=src, target=dst, reltype=edge.reltype))
+
+    return new_nodes, new_edges, new_lca
 
 
 def _rewrite_form_lca(
@@ -424,12 +566,6 @@ def extract_candidates(
             funnel.bump(assessment.reject)
             continue
 
-        key = tuple(sorted([leaf_a_id, leaf_b_id]) + [chosen])
-        if key in seen_pairs:
-            funnel.bump("duplicate_pair")
-            continue
-        seen_pairs.add(key)
-
         edges: list[GraphEdge] = []
         for path in (path_a, path_b):
             for src, dst in zip(path, path[1:]):
@@ -437,6 +573,28 @@ def extract_candidates(
                 edge = GraphEdge(source=src, target=dst, reltype=rel)
                 if not any(e.source == src and e.target == dst for e in edges):
                     edges.append(edge)
+
+        leaf_ids = {leaf_a_id, leaf_b_id}
+        node_list, edges, chosen = unify_same_gloss_ancestors(
+            node_list,
+            edges,
+            g=g,
+            glosses=glosses,
+            leaf_ids=leaf_ids,
+            lca_id=chosen,
+        )
+        if len(node_list) > max_nodes:
+            funnel.bump("too_big")
+            continue
+        lca_lang = g.nodes[chosen]["lang"]
+        lca_term = g.nodes[chosen]["term"]
+        lca_gloss = gloss_for(glosses, lca_lang, lca_term)
+
+        key = tuple(sorted([leaf_a_id, leaf_b_id]) + [chosen])
+        if key in seen_pairs:
+            funnel.bump("duplicate_pair")
+            continue
+        seen_pairs.add(key)
 
         leaf_a = {"lang": lang_a, "term": term_a, "gloss": gloss_a}
         leaf_b = {"lang": lang_b, "term": term_b, "gloss": gloss_b}

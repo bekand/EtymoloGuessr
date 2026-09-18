@@ -28,6 +28,8 @@ export type Graph = {
   edges: GraphEdge[]
 }
 
+export type PuzzleMode = 'easy' | 'hard' | 'medium'
+
 export type PuzzlePrompt = {
   id: string
   mode: 'easy' | 'hard'
@@ -38,11 +40,22 @@ export type PuzzlePrompt = {
   promptGraph?: Graph
 }
 
-export type SolveResponse = {
-  correct: boolean
-  correctChoice: string
-  choices: Choice[]
-  goldGraph: Graph
+export type MediumLeaf = {
+  id: string
+  lang: string
+  term: string
 }
 
-export type PuzzleMode = PuzzlePrompt['mode']
+export type MediumPrompt = {
+  id: string
+  mode: 'medium'
+  leaves: MediumLeaf[]
+}
+
+export type SolveResponse = {
+  correct: boolean
+  correctChoice?: string
+  choices?: Choice[]
+  goldGraph?: Graph
+  ancestors?: Term[]
+}

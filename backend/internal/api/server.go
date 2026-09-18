@@ -72,6 +72,28 @@ func (s *Server) handleRandom(w http.ResponseWriter, r *http.Request) {
 		n := minHardModeNodes
 		filter.MinNodes = &n
 	}
+
+	if mode == puzzle.ModeMedium {
+		puzzles, randErr := s.store.RandomPuzzles(r.Context(), filter, puzzle.MediumSetSize)
+		if errors.Is(randErr, puzzle.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "no enabled puzzles")
+			return
+		}
+		if randErr != nil {
+			s.logger.Error("random medium set", "err", randErr)
+			writeError(w, http.StatusInternalServerError, "failed to load puzzle")
+			return
+		}
+		payload, buildErr := mediumPromptPayload(puzzles)
+		if buildErr != nil {
+			s.logger.Error("medium prompt", "err", buildErr)
+			writeError(w, http.StatusInternalServerError, "failed to load puzzle")
+			return
+		}
+		writeJSON(w, http.StatusOK, payload)
+		return
+	}
+
 	p, err := s.store.RandomPuzzle(r.Context(), filter)
 	if errors.Is(err, puzzle.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "no enabled puzzles")
@@ -100,6 +122,22 @@ func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+
+	if mode == puzzle.ModeMedium {
+		puzzles, loadErr := s.loadMediumSet(w, r, id)
+		if loadErr != nil {
+			return
+		}
+		payload, buildErr := mediumPromptPayload(puzzles)
+		if buildErr != nil {
+			s.logger.Error("medium prompt", "err", buildErr)
+			writeError(w, http.StatusInternalServerError, "failed to load puzzle")
+			return
+		}
+		writeJSON(w, http.StatusOK, payload)
+		return
+	}
+
 	p, err := s.store.GetPuzzle(r.Context(), id)
 	if errors.Is(err, puzzle.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "puzzle not found")
@@ -121,13 +159,15 @@ type solveRequest struct {
 	Mode     string        `json:"mode"`
 	ChoiceID string        `json:"choiceId"`
 	Edges    []puzzle.Edge `json:"edges"`
+	Pairs    [][]string    `json:"pairs"`
 }
 
 type solveResponse struct {
 	Correct       bool            `json:"correct"`
-	GoldGraph     puzzle.Graph    `json:"goldGraph"`
-	Choices       []puzzle.Choice `json:"choices"`
-	CorrectChoice string          `json:"correctChoice"`
+	GoldGraph     *puzzle.Graph   `json:"goldGraph,omitempty"`
+	Choices       []puzzle.Choice `json:"choices,omitempty"`
+	CorrectChoice string          `json:"correctChoice,omitempty"`
+	Ancestors     []puzzle.Term   `json:"ancestors,omitempty"`
 }
 
 func (s *Server) handleSolve(w http.ResponseWriter, r *http.Request) {
@@ -146,6 +186,12 @@ func (s *Server) handleSolve(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+
+	if mode == puzzle.ModeMedium {
+		s.solveMedium(w, r, id, req.Pairs)
+		return
+	}
+
 	p, err := s.store.GetPuzzle(r.Context(), id)
 	if errors.Is(err, puzzle.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "puzzle not found")
@@ -169,12 +215,76 @@ func (s *Server) handleSolve(w http.ResponseWriter, r *http.Request) {
 		correct = puzzle.EdgeSetsEqual(p.AnswerGraph.Edges, req.Edges)
 	}
 
+	graph := p.AnswerGraph
 	writeJSON(w, http.StatusOK, solveResponse{
 		Correct:       correct,
-		GoldGraph:     p.AnswerGraph,
+		GoldGraph:     &graph,
 		Choices:       p.Choices,
 		CorrectChoice: p.CorrectChoice,
 	})
+}
+
+func (s *Server) solveMedium(w http.ResponseWriter, r *http.Request, id string, pairs [][]string) {
+	puzzles, err := s.loadMediumSet(w, r, id)
+	if err != nil {
+		return
+	}
+	if len(pairs) != puzzle.MediumSetSize {
+		writeError(w, http.StatusBadRequest, "pairs must contain 4 pairs")
+		return
+	}
+	submitted := make([][2]string, 0, len(pairs))
+	for _, pair := range pairs {
+		if len(pair) != 2 {
+			writeError(w, http.StatusBadRequest, "each pair must have two leaf ids")
+			return
+		}
+		submitted = append(submitted, [2]string{pair[0], pair[1]})
+	}
+
+	gold := make([][2]string, 0, puzzle.MediumSetSize)
+	ancestors := make([]puzzle.Term, 0, puzzle.MediumSetSize)
+	for _, p := range puzzles {
+		gold = append(gold, [2]string{
+			puzzle.LeafToken(p.ID, "a"),
+			puzzle.LeafToken(p.ID, "b"),
+		})
+		anc, ok := puzzle.RootAncestor(p.AnswerGraph)
+		if !ok {
+			s.logger.Error("medium root ancestor missing", "id", p.ID)
+			writeError(w, http.StatusInternalServerError, "failed to grade puzzle")
+			return
+		}
+		ancestors = append(ancestors, anc)
+	}
+
+	writeJSON(w, http.StatusOK, solveResponse{
+		Correct:   puzzle.PairSetsEqual(gold, submitted),
+		Ancestors: ancestors,
+	})
+}
+
+func (s *Server) loadMediumSet(w http.ResponseWriter, r *http.Request, id string) ([]*puzzle.Puzzle, error) {
+	ids, err := puzzle.ParseMediumSetID(id)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return nil, err
+	}
+	puzzles := make([]*puzzle.Puzzle, 0, len(ids))
+	for _, puzzleID := range ids {
+		p, getErr := s.store.GetPuzzle(r.Context(), puzzleID)
+		if errors.Is(getErr, puzzle.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "puzzle not found")
+			return nil, getErr
+		}
+		if getErr != nil {
+			s.logger.Error("get puzzle", "err", getErr)
+			writeError(w, http.StatusInternalServerError, "failed to load puzzle")
+			return nil, getErr
+		}
+		puzzles = append(puzzles, p)
+	}
+	return puzzles, nil
 }
 
 type promptResponse struct {
@@ -185,6 +295,18 @@ type promptResponse struct {
 	LeafB       json.RawMessage `json:"leafB"`
 	Choices     []puzzle.Choice `json:"choices"`
 	PromptGraph *puzzle.Graph   `json:"promptGraph,omitempty"`
+}
+
+type mediumLeaf struct {
+	ID   string `json:"id"`
+	Lang string `json:"lang"`
+	Term string `json:"term"`
+}
+
+type mediumPromptResponse struct {
+	ID     string       `json:"id"`
+	Mode   puzzle.Mode  `json:"mode"`
+	Leaves []mediumLeaf `json:"leaves"`
 }
 
 func eligibleForMode(p *puzzle.Puzzle, mode puzzle.Mode) bool {
@@ -207,6 +329,35 @@ func promptPayload(p *puzzle.Puzzle, mode puzzle.Mode) promptResponse {
 		Choices:     p.Choices,
 		PromptGraph: puzzle.PromptGraph(p.AnswerGraph, mode),
 	}
+}
+
+func mediumPromptPayload(puzzles []*puzzle.Puzzle) (mediumPromptResponse, error) {
+	if len(puzzles) != puzzle.MediumSetSize {
+		return mediumPromptResponse{}, errors.New("medium set size mismatch")
+	}
+	ids := make([]string, len(puzzles))
+	leaves := make([]mediumLeaf, 0, puzzle.MediumSetSize*2)
+	for i, p := range puzzles {
+		ids[i] = p.ID
+		a, err := puzzle.DecodeTerm(p.LeafA)
+		if err != nil {
+			return mediumPromptResponse{}, err
+		}
+		b, err := puzzle.DecodeTerm(p.LeafB)
+		if err != nil {
+			return mediumPromptResponse{}, err
+		}
+		leaves = append(leaves,
+			mediumLeaf{ID: puzzle.LeafToken(p.ID, "a"), Lang: a.Lang, Term: a.Term},
+			mediumLeaf{ID: puzzle.LeafToken(p.ID, "b"), Lang: b.Lang, Term: b.Term},
+		)
+	}
+	setID := puzzle.MediumSetID(ids)
+	return mediumPromptResponse{
+		ID:     setID,
+		Mode:   puzzle.ModeMedium,
+		Leaves: puzzle.ShuffleByID(leaves, setID),
+	}, nil
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

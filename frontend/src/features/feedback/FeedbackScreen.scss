@@ -35,6 +35,46 @@
     @include mx.blotter-panel;
   }
 
+  .ancestorPlaceholder {
+    width: 100%;
+    min-height: 10rem;
+    @include mx.blotter-panel;
+  }
+
+  .ancestorGrid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-3);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    width: 100%;
+  }
+
+  .ancestorTile {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-width: 0;
+    padding: var(--space-3) var(--space-4);
+    @include mx.paper-ruled;
+  }
+
+  .ancestorLang {
+    @include mx.mono-kicker($tracking: 0.1em, $color: var(--ink-muted));
+  }
+
+  .ancestorTerm {
+    @include mx.mono-term(var(--text-base));
+    overflow-wrap: anywhere;
+  }
+
+  .ancestorGloss {
+    @include mx.serif-italic(var(--text-xs));
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+
   .nextRow {
     display: flex;
     justify-content: flex-end;

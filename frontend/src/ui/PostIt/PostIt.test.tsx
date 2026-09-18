@@ -54,10 +54,20 @@ describe('PostIt', () => {
     const hardWidth = 16 * rem
     // HardMode.scss below-desktop 2-col, page gutters: (64rem - 0.0625rem - 2 * 2.5rem - 0.75rem) / 2
     const hardBelowDesktopWidth = ((64 - 0.0625 - 5 - 0.75) / 2) * rem
+    // MediumMode.scss phone 2-col: (48rem - 0.0625rem - 2 * 1.25rem - 0.75rem) / 2
+    const mediumPhoneWidth = ((48 - 0.0625 - 2.5 - 0.75) / 2) * rem
+    // MediumMode.scss tablet 4-col at 48rem: (48rem - 2 * 1.25rem - 3 * 0.75rem) / 4
+    const mediumTabletWidth = ((48 - 2.5 - 2.25) / 4) * rem
     // PostIt.scss: space-5 + space-4 padding and 6-line body at text-base / 1.4
     const maxHeight = (1.5 + 1 + 6 * 1.0625 * 1.4) * rem + 2
 
-    for (const width of [easyWidth, hardWidth, hardBelowDesktopWidth]) {
+    for (const width of [
+      easyWidth,
+      hardWidth,
+      hardBelowDesktopWidth,
+      mediumPhoneWidth,
+      mediumTabletWidth,
+    ]) {
       const { dx, dy } = aabbProtrusion(width, maxHeight, POST_IT_MAX_TILT_DEG)
       expect(2 * dx).toBeLessThan(gap)
       expect(2 * dy + hoverLift).toBeLessThan(gap)

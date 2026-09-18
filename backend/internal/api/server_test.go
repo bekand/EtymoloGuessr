@@ -74,6 +74,39 @@ func fixtureHardPuzzle() *puzzle.Puzzle {
 	return p
 }
 
+func fixtureMediumPuzzles() []*puzzle.Puzzle {
+	mk := func(id, aLang, aTerm, bLang, bTerm, ancLang, ancTerm, gloss string) *puzzle.Puzzle {
+		return &puzzle.Puzzle{
+			ID:      id,
+			Enabled: true,
+			LeafA:   json.RawMessage(`{"lang":"` + aLang + `","term":"` + aTerm + `"}`),
+			LeafB:   json.RawMessage(`{"lang":"` + bLang + `","term":"` + bTerm + `"}`),
+			AnswerGraph: puzzle.Graph{
+				Nodes: []puzzle.Node{
+					{ID: aLang + ":" + aTerm, Lang: aLang, Term: aTerm, Role: "leaf"},
+					{ID: bLang + ":" + bTerm, Lang: bLang, Term: bTerm, Role: "leaf"},
+					{ID: ancLang + ":" + ancTerm, Lang: ancLang, Term: ancTerm, Gloss: &gloss, Role: "ancestor"},
+				},
+				Edges: []puzzle.Edge{
+					{From: aLang + ":" + aTerm, To: ancLang + ":" + ancTerm},
+					{From: bLang + ":" + bTerm, To: ancLang + ":" + ancTerm},
+				},
+			},
+			Choices:       []puzzle.Choice{{ID: "c0", Gloss: gloss}},
+			CorrectChoice: "c0",
+			QualityScore:  5,
+			LangPair:      "de-en",
+			Source:        "test",
+		}
+	}
+	return []*puzzle.Puzzle{
+		mk("m11111111111111111", "English", "father", "German", "Vater", "Proto-Germanic", "*fader", "a male parent"),
+		mk("m22222222222222222", "English", "hound", "German", "Hund", "Proto-Germanic", "*hundaz", "a dog"),
+		mk("m33333333333333333", "English", "gift", "German", "Gift", "Proto-Germanic", "*giftiz", "something given"),
+		mk("m44444444444444444", "English", "house", "German", "Haus", "Proto-Germanic", "*hūsą", "a dwelling"),
+	}
+}
+
 func testHandler() http.Handler {
 	return testHandlerWith(fixturePuzzle())
 }
@@ -251,8 +284,8 @@ func TestSolveEasy(t *testing.T) {
 	if got.CorrectChoice != "c0" {
 		t.Fatalf("gold choice %q", got.CorrectChoice)
 	}
-	if len(got.GoldGraph.Edges) != 2 {
-		t.Fatalf("expected gold edges on solve, got %d", len(got.GoldGraph.Edges))
+	if got.GoldGraph == nil || len(got.GoldGraph.Edges) != 2 {
+		t.Fatalf("expected gold edges on solve, got %#v", got.GoldGraph)
 	}
 }
 
@@ -370,5 +403,126 @@ func TestInvalidMode(t *testing.T) {
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status %d", res.StatusCode)
+	}
+}
+
+func TestRandomMediumReturnsEightLeaves(t *testing.T) {
+	set := fixtureMediumPuzzles()
+	srv := httptest.NewServer(testHandlerWith(set...))
+	defer srv.Close()
+
+	res, err := http.Get(srv.URL + "/puzzles/random?mode=medium")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status %d", res.StatusCode)
+	}
+	body, _ := io.ReadAll(res.Body)
+	raw := string(body)
+	if strings.Contains(raw, "leafA") || strings.Contains(raw, "leafB") || strings.Contains(raw, "correctChoice") {
+		t.Fatalf("medium GET leaked pairing fields: %s", raw)
+	}
+	var payload mediumPromptResponse
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Mode != puzzle.ModeMedium {
+		t.Fatalf("mode %q", payload.Mode)
+	}
+	if len(payload.Leaves) != 8 {
+		t.Fatalf("leaves %d", len(payload.Leaves))
+	}
+	ids := strings.Split(payload.ID, ",")
+	if len(ids) != 4 {
+		t.Fatalf("set id %q", payload.ID)
+	}
+	for _, leaf := range payload.Leaves {
+		for _, pid := range ids {
+			if strings.HasPrefix(leaf.ID, pid) || leaf.ID == pid {
+				t.Fatalf("opaque leaf id %q exposes puzzle id %q", leaf.ID, pid)
+			}
+		}
+	}
+}
+
+func TestGetMediumBySetID(t *testing.T) {
+	set := fixtureMediumPuzzles()
+	srv := httptest.NewServer(testHandlerWith(set...))
+	defer srv.Close()
+
+	setID := puzzle.MediumSetID([]string{set[0].ID, set[1].ID, set[2].ID, set[3].ID})
+	res, err := http.Get(srv.URL + "/puzzles/" + setID + "?mode=medium")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status %d", res.StatusCode)
+	}
+	var payload mediumPromptResponse
+	if err := json.NewDecoder(res.Body).Decode(&payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.ID != setID {
+		t.Fatalf("id %q want %q", payload.ID, setID)
+	}
+	if len(payload.Leaves) != 8 {
+		t.Fatalf("leaves %d", len(payload.Leaves))
+	}
+}
+
+func TestSolveMedium(t *testing.T) {
+	set := fixtureMediumPuzzles()
+	srv := httptest.NewServer(testHandlerWith(set...))
+	defer srv.Close()
+	setID := puzzle.MediumSetID([]string{set[0].ID, set[1].ID, set[2].ID, set[3].ID})
+
+	correctPairs := make([][]string, 0, 4)
+	for _, p := range set {
+		correctPairs = append(correctPairs, []string{
+			puzzle.LeafToken(p.ID, "a"),
+			puzzle.LeafToken(p.ID, "b"),
+		})
+	}
+	body, _ := json.Marshal(map[string]any{"mode": "medium", "pairs": correctPairs})
+	res, err := http.Post(srv.URL+"/puzzles/"+setID+"/solve", "application/json", strings.NewReader(string(body)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	var got solveResponse
+	if err := json.NewDecoder(res.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if !got.Correct {
+		t.Fatal("expected correct medium solve")
+	}
+	if len(got.Ancestors) != 4 {
+		t.Fatalf("ancestors %d", len(got.Ancestors))
+	}
+	if got.GoldGraph != nil {
+		t.Fatal("medium solve should omit goldGraph")
+	}
+
+	wrong := [][]string{
+		{puzzle.LeafToken(set[0].ID, "a"), puzzle.LeafToken(set[1].ID, "a")},
+		{puzzle.LeafToken(set[0].ID, "b"), puzzle.LeafToken(set[1].ID, "b")},
+		{puzzle.LeafToken(set[2].ID, "a"), puzzle.LeafToken(set[2].ID, "b")},
+		{puzzle.LeafToken(set[3].ID, "a"), puzzle.LeafToken(set[3].ID, "b")},
+	}
+	wrongBody, _ := json.Marshal(map[string]any{"mode": "medium", "pairs": wrong})
+	res2, err := http.Post(srv.URL+"/puzzles/"+setID+"/solve", "application/json", strings.NewReader(string(wrongBody)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res2.Body.Close()
+	var gotWrong solveResponse
+	if err := json.NewDecoder(res2.Body).Decode(&gotWrong); err != nil {
+		t.Fatal(err)
+	}
+	if gotWrong.Correct {
+		t.Fatal("mismatched pairs should be incorrect")
 	}
 }

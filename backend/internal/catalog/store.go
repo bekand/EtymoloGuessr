@@ -43,7 +43,7 @@ func (s *MemoryStore) Len() int {
 	return len(s.byID)
 }
 
-func (s *MemoryStore) RandomPuzzle(_ context.Context, filter puzzle.Filter) (*puzzle.Puzzle, error) {
+func (s *MemoryStore) matching(filter puzzle.Filter) []*puzzle.Puzzle {
 	var matches []*puzzle.Puzzle
 	for _, id := range s.order {
 		p := s.byID[id]
@@ -52,10 +52,31 @@ func (s *MemoryStore) RandomPuzzle(_ context.Context, filter puzzle.Filter) (*pu
 		}
 		matches = append(matches, p)
 	}
+	return matches
+}
+
+func (s *MemoryStore) RandomPuzzle(_ context.Context, filter puzzle.Filter) (*puzzle.Puzzle, error) {
+	matches := s.matching(filter)
 	if len(matches) == 0 {
 		return nil, puzzle.ErrNotFound
 	}
 	return matches[rand.IntN(len(matches))], nil
+}
+
+func (s *MemoryStore) RandomPuzzles(_ context.Context, filter puzzle.Filter, n int) ([]*puzzle.Puzzle, error) {
+	if n <= 0 {
+		return nil, puzzle.ErrNotFound
+	}
+	matches := s.matching(filter)
+	if len(matches) < n {
+		return nil, puzzle.ErrNotFound
+	}
+	rand.Shuffle(len(matches), func(i, j int) { matches[i], matches[j] = matches[j], matches[i] })
+	picked := puzzle.SelectDistinctLeaves(matches, n)
+	if len(picked) < n {
+		return nil, puzzle.ErrNotFound
+	}
+	return picked, nil
 }
 
 func (s *MemoryStore) GetPuzzle(_ context.Context, id string) (*puzzle.Puzzle, error) {

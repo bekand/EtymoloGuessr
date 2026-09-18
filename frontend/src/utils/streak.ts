@@ -4,6 +4,7 @@ import type { PuzzleMode } from '@/api/types'
 const STREAK_KEYS: Record<PuzzleMode, string> = {
   easy: 'etymologuessr:easy-streak',
   hard: 'etymologuessr:hard-streak',
+  medium: 'etymologuessr:medium-streak',
 }
 
 function parseStreak(raw: string | null): number {

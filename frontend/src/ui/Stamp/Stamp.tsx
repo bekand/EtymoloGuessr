@@ -2,7 +2,7 @@ import type { ButtonHTMLAttributes, ReactNode } from 'react'
 import { useId } from 'react'
 import './Stamp.scss'
 
-export type StampTone = 'black' | 'red' | 'green'
+export type StampTone = 'black' | 'red' | 'green' | 'blue'
 
 type StampProps = {
   children: ReactNode

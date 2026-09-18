@@ -1,5 +1,6 @@
 from typing import Any, cast
 
+import networkx as nx
 import pandas as pd
 import pytest
 
@@ -23,8 +24,10 @@ from etl.generate import (
     make_choices,
     prefer_latin_chain_path,
     prepare_score_buckets,
+    unify_same_gloss_ancestors,
 )
 from etl.ids import puzzle_id
+from etl.models import GraphEdge, Puzzle, node_id
 from etl.quality import (
     assess_pair,
     meaning_overlap,
@@ -33,7 +36,6 @@ from etl.quality import (
     shares_meaning,
 )
 from etl.validate import validate_puzzles
-from etl.models import Puzzle, node_id
 
 
 def test_first_gloss_joins_colon_qualifier():
@@ -547,7 +549,7 @@ def test_extract_candidates_routes_parallel_der_through_late_latin():
 
 
 def test_extract_candidates_routes_spanish_late_latin_variant_through_latin():
-    """After align, Late Latin breve twin is kept; gold path prefers Latin-family hop."""
+    """Late Latin breve twin is aligned, then unified onto Classical Latin."""
     rows = [
         dict(
             term="ap\u00f3strofo",
@@ -601,10 +603,12 @@ def test_extract_candidates_routes_spanish_late_latin_variant_through_latin():
     cands = extract_candidates(g, glosses, extract_cfg, funnel)
     assert len(cands) == 1
     gold = {(e.source, e.target) for e in cands[0]["edges"]}
-    assert ("Spanish:ap\u00f3strofo", "Late Latin:apostr\u014fphus") in gold
-    assert ("Late Latin:apostr\u014fphus", "Ancient Greek:\u1f00\u03c0\u03cc\u03c3\u03c4\u03c1\u03bf\u03c6\u03bf\u03c2") in gold
+    # Same-gloss Latin-family unify prefers Classical Latin over Late Latin.
+    assert ("Spanish:ap\u00f3strofo", "Latin:apostrophus") in gold
+    assert ("Latin:apostrophus", "Ancient Greek:\u1f00\u03c0\u03cc\u03c3\u03c4\u03c1\u03bf\u03c6\u03bf\u03c2") in gold
     assert ("Spanish:ap\u00f3strofo", "Ancient Greek:\u1f00\u03c0\u03cc\u03c3\u03c4\u03c1\u03bf\u03c6\u03bf\u03c2") not in gold
     assert ("German:Apostroph", "Latin:apostrophus") in gold
+    assert not any("Late Latin:" in n for n in cands[0]["nodes"])
 
 
 def test_first_gloss_empty_or_missing_senses():
@@ -1219,6 +1223,147 @@ def test_extract_candidates_soft_penalties_not_hard_rejects(
     assert cands[0]["quality_score"] == expected_score, reason
     assert funnel.counts.get("lca_equals_leaf", 0) == 0
     assert funnel.counts.get("same_meaning", 0) == 0
+
+
+def test_extract_candidates_unifies_same_lang_same_gloss_spelling_variants():
+    """Latin planēta / planeta with the same gloss collapse to the macron form."""
+    rows = [
+        dict(
+            term="planeta",
+            lang="Portuguese",
+            reltype="inherited_from",
+            related_term="planēta",
+            related_lang="Latin",
+        ),
+        dict(
+            term="planēta",
+            lang="Latin",
+            reltype="inherited_from",
+            related_term="πλανήτης",
+            related_lang="Ancient Greek",
+        ),
+        dict(
+            term="planet",
+            lang="English",
+            reltype="inherited_from",
+            related_term="planeta",
+            related_lang="Latin",
+        ),
+        dict(
+            term="planeta",
+            lang="Latin",
+            reltype="inherited_from",
+            related_term="πλανήτης",
+            related_lang="Ancient Greek",
+        ),
+    ]
+    glosses = {
+        "Portuguese\tplaneta": "planet body",
+        "English\tplanet": "celestial wanderer",
+        "Latin\tplanēta": "planet (wandering star)",
+        "Latin\tplaneta": "planet (wandering star)",
+        "Ancient Greek\tπλανήτης": "wanderer vagabond",
+    }
+    g = build_graph(pd.DataFrame(rows), {"inherited_from"})
+    funnel = Funnel()
+    cands = extract_candidates(g, glosses, _two_leaf_lca_cfg(), funnel)
+    assert len(cands) >= 1
+    latin_nodes = [n for n in cands[0]["nodes"] if n.startswith("Latin:")]
+    assert latin_nodes == ["Latin:planēta"]
+    edge_pairs = {(e.source, e.target) for e in cands[0]["edges"]}
+    assert ("Portuguese:planeta", "Latin:planēta") in edge_pairs
+    assert ("English:planet", "Latin:planēta") in edge_pairs
+    assert ("Latin:planēta", "Ancient Greek:πλανήτης") in edge_pairs
+    assert not any(e.source == e.target for e in cands[0]["edges"])
+    assert "Latin:planeta" not in cands[0]["nodes"]
+
+
+def test_extract_candidates_unifies_latin_family_same_folded_spelling():
+    """Latin / Late Latin twins with the same gloss keep Classical Latin."""
+    rows = [
+        dict(
+            term="bolsa",
+            lang="Spanish",
+            reltype="inherited_from",
+            related_term="bursa",
+            related_lang="Late Latin",
+        ),
+        dict(
+            term="bursa",
+            lang="Late Latin",
+            reltype="inherited_from",
+            related_term="*bursaz",
+            related_lang="Proto-Germanic",
+        ),
+        dict(
+            term="purse",
+            lang="English",
+            reltype="inherited_from",
+            related_term="bursa",
+            related_lang="Latin",
+        ),
+        dict(
+            term="bursa",
+            lang="Latin",
+            reltype="inherited_from",
+            related_term="*bursaz",
+            related_lang="Proto-Germanic",
+        ),
+    ]
+    glosses = {
+        "Spanish\tbolsa": "bag pouch",
+        "English\tpurse": "money pouch",
+        "Late Latin\tbursa": "oxhide animal skin",
+        "Latin\tbursa": "oxhide animal skin",
+        "Proto-Germanic\t*bursaz": "ancient hide sense",
+    }
+    g = build_graph(pd.DataFrame(rows), {"inherited_from"})
+    funnel = Funnel()
+    cands = extract_candidates(g, glosses, _two_leaf_lca_cfg(), funnel)
+    assert len(cands) >= 1
+    family = [n for n in cands[0]["nodes"] if n.startswith("Latin:") or n.startswith("Late Latin:")]
+    assert family == ["Latin:bursa"]
+    edge_pairs = {(e.source, e.target) for e in cands[0]["edges"]}
+    assert ("Spanish:bolsa", "Latin:bursa") in edge_pairs
+    assert ("English:purse", "Latin:bursa") in edge_pairs
+
+
+def test_unify_same_gloss_prefers_lca_even_over_classical_latin():
+    """When the LCA is itself a Latin-family twin, keep the LCA id."""
+    g = nx.DiGraph()
+    g.add_node("Late Latin:bursa", lang="Late Latin", term="bursa")
+    g.add_node("Latin:bursa", lang="Latin", term="bursa")
+    g.add_node("Spanish:bolsa", lang="Spanish", term="bolsa")
+    g.add_node("English:purse", lang="English", term="purse")
+    glosses = {
+        "Late Latin\tbursa": "oxhide animal skin",
+        "Latin\tbursa": "oxhide animal skin",
+    }
+    nodes = [
+        "Spanish:bolsa",
+        "Late Latin:bursa",
+        "Latin:bursa",
+        "English:purse",
+    ]
+    edges = [
+        GraphEdge(source="Spanish:bolsa", target="Late Latin:bursa", reltype="inherited_from"),
+        GraphEdge(source="English:purse", target="Latin:bursa", reltype="inherited_from"),
+    ]
+    new_nodes, new_edges, new_lca = unify_same_gloss_ancestors(
+        nodes,
+        edges,
+        g=g,
+        glosses=glosses,
+        leaf_ids={"Spanish:bolsa", "English:purse"},
+        lca_id="Late Latin:bursa",
+    )
+    assert new_lca == "Late Latin:bursa"
+    assert "Latin:bursa" not in new_nodes
+    assert "Late Latin:bursa" in new_nodes
+    assert {(e.source, e.target) for e in new_edges} == {
+        ("Spanish:bolsa", "Late Latin:bursa"),
+        ("English:purse", "Late Latin:bursa"),
+    }
 
 
 def test_extract_candidates_accepts_lca_term_length_three():

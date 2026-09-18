@@ -6,6 +6,7 @@ import './PlayHeader.scss'
 const MODE_LABEL: Record<PuzzleMode, string> = {
   easy: 'Easy',
   hard: 'Hard',
+  medium: 'Medium',
 }
 
 type PlayHeaderProps = {
