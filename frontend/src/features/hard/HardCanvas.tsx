@@ -256,10 +256,10 @@ function HardCanvasBoard({
   }
 
   return (
-    <div className="hardPlay">
+    <section className="hardPlay" aria-label="Etymology graph">
       <section className="palette" aria-label="Word cards">
-        <p className="sectionLabel">Terms</p>
         <div className="notes">
+          <p className="sectionLabel">Terms</p>
           {cards.map((card, index) => {
             const placed = placedIds.has(card.id)
             return (
@@ -340,7 +340,7 @@ function HardCanvasBoard({
           <Background color="var(--rule)" gap={24} size={1} />
         </ReactFlow>
       </div>
-    </div>
+    </section>
   )
 }
 

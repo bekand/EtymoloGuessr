@@ -6,6 +6,8 @@ type SheetTone = 'paper' | 'kraft'
 
 type SheetProps = {
   children: ReactNode
+  header?: ReactNode
+  instruction?: ReactNode
   tone?: SheetTone
   className?: string
   style?: CSSProperties
@@ -15,6 +17,8 @@ type SheetProps = {
 
 export function Sheet({
   children,
+  header,
+  instruction,
   tone = 'paper',
   className,
   style,
@@ -25,6 +29,8 @@ export function Sheet({
 
   return (
     <Tag className={classes} style={style} onAnimationEnd={onAnimationEnd}>
+      {header}
+      {instruction ? <p className="instruction">{instruction}</p> : null}
       {children}
     </Tag>
   )

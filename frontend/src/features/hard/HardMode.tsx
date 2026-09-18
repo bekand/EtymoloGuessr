@@ -60,16 +60,13 @@ export function HardMode() {
     : 'Waiting for cards'
 
   return (
-    <ModeShell mode="hard" streak={streak} settling={settling} onAnimationEnd={onAnimationEnd}>
-      {revealing ? null : (
-        <>
-          <p className="instruction">
-            Place every card on the blotter, then draw lines from descendant to ancestor.
-          </p>
-          <p className="statusLine" aria-live="polite">{progressText}</p>
-        </>
-      )}
-
+    <ModeShell
+      mode="hard"
+      streak={streak}
+      settling={settling}
+      onAnimationEnd={onAnimationEnd}
+      instruction={revealing ? undefined : 'Place every card on the blotter, then draw lines from descendant to ancestor.'}
+    >
       {revealing ? (
         <FeedbackScreen
           mode="hard"
@@ -80,6 +77,7 @@ export function HardMode() {
         />
       ) : (
         <>
+          <p className="statusLine" aria-live="polite">{progressText}</p>
           {loading ? (
             <div className="graphPlaceholder" aria-busy="true" />
           ) : graph ? (

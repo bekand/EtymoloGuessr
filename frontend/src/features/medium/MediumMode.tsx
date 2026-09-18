@@ -171,7 +171,6 @@ export function MediumMode() {
   function renderGrid() {
     return (
       <section className="board" aria-label="Word tiles">
-        <p className="instruction">Pair the words that share a common ancestor.</p>
         <p className="statusLine" aria-live="polite">{progressText}</p>
         <div className="notes">
           {leaves.map((leaf) => {
@@ -245,7 +244,13 @@ export function MediumMode() {
   }
 
   return (
-    <ModeShell mode="medium" streak={streak} settling={settling} onAnimationEnd={onAnimationEnd}>
+    <ModeShell
+      mode="medium"
+      streak={streak}
+      settling={settling}
+      onAnimationEnd={onAnimationEnd}
+      instruction={revealing ? undefined : 'Pair the words that share a common ancestor.'}
+    >
       {revealing ? (
         <FeedbackScreen
           mode="medium"

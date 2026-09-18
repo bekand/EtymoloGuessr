@@ -2,24 +2,7 @@
 @use '../../styles/mixins' as mx;
 
 .hardMode {
-  @include mx.page-shell;
-  @include mx.settle-in;
-
   .instruction {
-    margin: 0 auto;
-    text-align: center;
-    font-family: var(--font-serif);
-    font-size: var(--text-base);
-    color: var(--ink-muted);
-  }
-
-  .statusLine {
-    margin: 0 auto var(--space-2);
-    font-family: var(--font-mono);
-    font-size: var(--text-xs);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--ink-muted);
     text-align: center;
   }
 
@@ -40,9 +23,13 @@
 
   .sectionLabel {
     @include mx.mono-kicker;
+    position: absolute;
+    top: calc(-1 * var(--space-5));
+    left: 0;
   }
 
   .notes {
+    position: relative;
     display: grid;
     gap: var(--space-3);
     width: 100%;
@@ -124,7 +111,7 @@
 
     .instruction {
       max-width: none;
-      text-align: left;
     }
   }
+
 }

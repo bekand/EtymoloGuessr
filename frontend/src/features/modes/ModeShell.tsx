@@ -7,6 +7,7 @@ export type ModeShellProps = {
 	streak: number
 	settling: boolean
 	onAnimationEnd: AnimationEventHandler<HTMLElement>
+	instruction?: ReactNode
 	children: ReactNode
 }
 
@@ -15,16 +16,18 @@ export function ModeShell({
 	streak,
 	settling,
 	onAnimationEnd,
+	instruction,
 	children,
 }: ModeShellProps) {
 	return (
 		<Sheet
 			as="main"
 			tone="kraft"
-			className={joinClasses(`${mode}Mode`, settling && 'settling')}
+			className={joinClasses('modeSheet', `${mode}Mode`, settling && 'settling')}
+			header={<PlayHeader mode={mode} streak={streak} />}
+			instruction={instruction}
 			onAnimationEnd={onAnimationEnd}
 		>
-			<PlayHeader mode={mode} streak={streak} />
 			{children}
 			<Colophon />
 		</Sheet>

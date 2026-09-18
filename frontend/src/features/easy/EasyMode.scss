@@ -2,19 +2,12 @@
 @use '../../styles/mixins' as mx;
 
 .easyMode {
-  @include mx.page-shell(var(--space-6));
-  @include mx.settle-in;
-
   .prompt {
     @include mx.flex-col-center(var(--space-4));
     text-align: center;
   }
 
   .instruction {
-    margin: 0;
-    font-family: var(--font-serif);
-    font-size: var(--text-lg);
-    color: var(--ink-muted);
     max-width: 36ch;
   }
 
@@ -34,25 +27,12 @@
   }
 
   .playRow {
-    @include mx.flex-col-center(var(--space-5));
+    @include mx.flex-col-center(var(--space-4));
     width: 100%;
   }
 
   .choices {
     @include mx.flex-col-center(var(--space-3));
-  }
-
-  .statusLine {
-    margin: 0;
-    font-family: var(--font-mono);
-    font-size: var(--text-xs);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--ink-muted);
-  }
-
-  .sectionLabel {
-    @include mx.mono-kicker;
   }
 
   .notes {
@@ -73,6 +53,10 @@
   }
 
   @include bp.mobile {
+    .playRow {
+      gap: var(--space-3);
+    }
+
     .cards {
       flex-direction: column;
       flex-wrap: nowrap;
@@ -90,6 +74,7 @@
   }
 
   @include bp.tablet {
+
     .cards {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));

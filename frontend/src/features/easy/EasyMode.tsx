@@ -61,9 +61,6 @@ export function EasyMode() {
   function renderPrompt() {
     return (
       <section className="prompt" aria-label="Word pair">
-        <p className="instruction">
-          What meaning do these words share in their common ancestor?
-        </p>
         <div className="cards">
           <IndexCard
             key={`${puzzle?.id ?? 'loading'}-a`}
@@ -96,7 +93,6 @@ export function EasyMode() {
   function renderChoices() {
     return (
       <section className="choices" aria-label="Meaning choices">
-        <p className="sectionLabel">{progressText}</p>
         <div className="notes">
           {choices.map((choice, index) => {
             const marker = CHOICE_MARKERS[index] ?? String(index + 1)
@@ -160,7 +156,13 @@ export function EasyMode() {
   }
 
   return (
-    <ModeShell mode="easy" streak={streak} settling={settling} onAnimationEnd={onAnimationEnd}>
+    <ModeShell
+      mode="easy"
+      streak={streak}
+      settling={settling}
+      onAnimationEnd={onAnimationEnd}
+      instruction={revealing ? undefined : 'What meaning do these words share in their common ancestor?'}
+    >
       {revealing ? null : renderPrompt()}
 
       {revealing ? (
@@ -173,6 +175,7 @@ export function EasyMode() {
         />
       ) : (
         <div className="playRow">
+          <p className="statusLine" aria-live="polite">{progressText}</p>
           {renderChoices()}
           {renderSubmit()}
         </div>
