@@ -11,10 +11,11 @@ from typing import Any, Callable
 import networkx as nx
 
 from etl.derive import (
+    LATIN_FAMILY_LANGS,
     canonical_lemma,
     gloss_for,
-    is_grammatical_gloss,
     is_redirect_gloss,
+    is_grammatical_gloss,
     load_derived_edges,
     load_gloss_index,
     load_lemma_index,
@@ -22,38 +23,13 @@ from etl.derive import (
 from etl.ids import puzzle_id
 from etl.models import GraphEdge, GraphNode, Puzzle, node_id
 from etl.paths import load_config, reports_dir
+from etl.quality import assess_pair, term_too_short
 
 log = logging.getLogger(__name__)
-
-FUNCTION_WORDS = {
-    "a",
-    "an",
-    "the",
-    "of",
-    "to",
-    "and",
-    "or",
-    "in",
-    "on",
-    "for",
-    "with",
-    "from",
-    "by",
-    "as",
-    "is",
-    "be",
-}
-MIN_TOKEN_LENGTH = 2
 
 # Orthographies where an initial capital marks a proper noun (not German, which
 # capitalizes all nouns). Applied only to modern leaf languages in this set.
 _PROPER_NOUN_CASE_LANGS = frozenset({"English", "Spanish", "Portuguese"})
-
-# Latin-family ancestors used when reconstructing leaf → Latin → LCA gold paths
-# for Wiktionary parallel ``der`` stars (e.g. German Ökonom).
-_LATIN_FAMILY_LANGS = frozenset(
-    {"Latin", "Late Latin", "Medieval Latin", "Vulgar Latin", "Old Latin"}
-)
 
 
 def is_proper_noun_leaf(lang: str, term: str) -> bool:
@@ -74,93 +50,6 @@ def is_proper_noun_leaf(lang: str, term: str) -> bool:
 def leaf_reuse_key(lang: str, term: str) -> str:
     """Identity for leaf-reuse dedup within a generate batch (lang + term)."""
     return f"{lang}\t{term}"
-
-
-def _iter_content_tokens(text: str):
-    """Yield alphanumeric tokens, skipping function words and short crumbs."""
-    buf: list[str] = []
-    for ch in text:
-        if ch.isalnum():
-            buf.append(ch)
-        else:
-            if buf:
-                w = "".join(buf)
-                buf = []
-                if w not in FUNCTION_WORDS and len(w) >= MIN_TOKEN_LENGTH:
-                    yield w
-    if buf:
-        w = "".join(buf)
-        if w not in FUNCTION_WORDS and len(w) >= MIN_TOKEN_LENGTH:
-            yield w
-
-
-def normalize_label(text: str | None) -> str:
-    """Casefold a term or gloss for identity checks; strip a reconstruction *."""
-    if not text:
-        return ""
-    s = text.strip().casefold()
-    if s.startswith("*"):
-        s = s[1:].lstrip()
-    return s
-
-
-def content_tokens(text: str | None, *, head_only: bool = False) -> set[str]:
-    """Content tokens after normalize_label; optionally only the first token."""
-    tokens = set()
-    for word in _iter_content_tokens(normalize_label(text)):
-        tokens.add(word)
-        if head_only:
-            break
-    return tokens
-
-
-def meaning_overlap(a: str | None, b: str | None, *, head_only: bool = False) -> float:
-    """Jaccard of content tokens (singletons when head_only). Empty side -> 0.0."""
-    ta, tb = content_tokens(a, head_only=head_only), content_tokens(b, head_only=head_only)
-    if not ta or not tb:
-        return 0.0
-    return len(ta & tb) / len(ta | tb)
-
-
-def shares_meaning(a: str | None, b: str | None, *, head_only: bool = False) -> bool:
-    """True when two labels share any content token (first token only if head_only)."""
-    return meaning_overlap(a, b, head_only=head_only) > 0
-
-
-def pair_meaning(
-    term_a: str | None,
-    gloss_a: str | None,
-    term_b: str | None,
-    gloss_b: str | None,
-    lca_term: str | None,
-    lca_gloss: str | None,
-    max_overlap: float,
-) -> tuple[str | None, bool]:
-    """Reject reason and high-overlap flag for a leaf pair vs its LCA.
-
-    Returns ``(reject_reason, high_overlap)``. ``reject_reason`` is
-    ``lca_equals_leaf`` (headword leak), ``same_meaning`` (both terms still in
-    the LCA gloss, or leaf-gloss Jaccard >= max_overlap), or ``None`` to keep.
-    ``high_overlap`` is True when either leaf term still appears in the LCA gloss
-    (quality penalty); False when rejected.
-    """
-    for leaf_term, leaf_gloss in ((term_a, gloss_a), (term_b, gloss_b)):
-        leaf_heads = content_tokens(leaf_term, head_only=True) | content_tokens(
-            leaf_gloss, head_only=True
-        )
-        lca_heads = content_tokens(lca_term, head_only=True) | content_tokens(
-            lca_gloss, head_only=True
-        )
-        if leaf_heads & lca_heads:
-            return "lca_equals_leaf", False
-
-    a_in_lca = shares_meaning(term_a, lca_gloss)
-    b_in_lca = shares_meaning(term_b, lca_gloss)
-    if a_in_lca and b_in_lca:
-        return "same_meaning", False
-    if meaning_overlap(gloss_a, gloss_b) >= max_overlap:
-        return "same_meaning", False
-    return None, a_in_lca or b_in_lca
 
 
 def lang_pair_code(lang_a: str, lang_b: str, leaf_codes: dict[str, str]) -> str:
@@ -211,7 +100,7 @@ def _latin_family_neighbors(g: nx.DiGraph, leaf_id: str) -> list[str]:
     """Direct Latin-family out-neighbors of ``leaf_id``, sorted for stability."""
     out: list[str] = []
     for _, succ in g.out_edges(leaf_id):
-        if g.nodes[succ].get("lang") in _LATIN_FAMILY_LANGS:
+        if g.nodes[succ].get("lang") in LATIN_FAMILY_LANGS:
             out.append(succ)
     out.sort()
     return out
@@ -232,7 +121,7 @@ def prefer_latin_chain_path(
     """
     if len(path) != 2 or path[0] == lca_id or path[-1] != lca_id:
         return path
-    if g.nodes[lca_id].get("lang") in _LATIN_FAMILY_LANGS:
+    if g.nodes[lca_id].get("lang") in LATIN_FAMILY_LANGS:
         return path
     leaf_id = path[0]
     latin_neighbors = _latin_family_neighbors(g, leaf_id)
@@ -284,30 +173,6 @@ def _rewrite_form_lca(
         return [new_id if n == chosen else n for n in seq]
 
     return new_id, _swap(path_a), _swap(path_b), _swap(node_list)
-
-
-def quality_score(
-    *,
-    lang_a: str,
-    lang_b: str,
-    term_a: str,
-    term_b: str,
-    high_overlap: bool,
-    lca_is_modern: bool,
-) -> int:
-    """Integer 0-5. Same-language pairs are heavily down-ranked (−3)."""
-    score = 5
-    if lang_a == lang_b:
-        score -= 3
-    if {lang_a, lang_b} == {"Spanish", "Portuguese"}:
-        a, b = normalize_label(term_a), normalize_label(term_b)
-        if len(a) >= 3 and len(b) >= 3 and a[:3] == b[:3]:
-            score -= 2
-    if lca_is_modern:
-        score -= 1
-    if high_overlap:
-        score -= 1
-    return max(0, score)
 
 
 class Funnel:
@@ -450,7 +315,6 @@ def extract_candidates(
     ancestor_reltypes = set(cfg["ancestor_reltypes"])
     generation_config = cfg["generate"]
     max_nodes = int(generation_config["max_nodes"])
-    max_overlap = float(generation_config["max_gloss_overlap"])
     lemmas = lemmas or {}
 
     leaves = [n for n, data in g.nodes(data=True) if data.get("lang") in leaf_langs]
@@ -467,6 +331,9 @@ def extract_candidates(
         term = g.nodes[n]["term"]
         if is_proper_noun_leaf(lang, term):
             funnel.bump("proper_noun_leaf")
+            continue
+        if term_too_short(term):
+            funnel.bump("term_too_short")
             continue
         gloss = gloss_for(glosses, lang, term)
         if not gloss:
@@ -542,22 +409,19 @@ def extract_candidates(
         if len(node_list) > max_nodes:
             funnel.bump("too_big")
             continue
-        if not lca_term or len(lca_term) < 3:
-            funnel.bump("lca_term_too_short")
-            continue
         lca_gloss = gloss_for(glosses, lca_lang, lca_term)
-        if not lca_gloss:
-            funnel.bump("no_gloss")
-            continue
-        if is_grammatical_gloss(lca_gloss):
-            funnel.bump("inflection_lca")
-            continue
-
-        reject, high_overlap = pair_meaning(
-            term_a, gloss_a, term_b, gloss_b, lca_term, lca_gloss, max_overlap
+        assessment = assess_pair(
+            lang_a=lang_a,
+            lang_b=lang_b,
+            term_a=term_a,
+            gloss_a=gloss_a,
+            term_b=term_b,
+            gloss_b=gloss_b,
+            lca_term=lca_term,
+            lca_gloss=lca_gloss,
         )
-        if reject:
-            funnel.bump(reject)
+        if assessment.reject:
+            funnel.bump(assessment.reject)
             continue
 
         key = tuple(sorted([leaf_a_id, leaf_b_id]) + [chosen])
@@ -577,14 +441,7 @@ def extract_candidates(
         leaf_a = {"lang": lang_a, "term": term_a, "gloss": gloss_a}
         leaf_b = {"lang": lang_b, "term": term_b, "gloss": gloss_b}
         lca = {"lang": lca_lang, "term": lca_term, "gloss": lca_gloss, "id": chosen}
-        score = quality_score(
-            lang_a=lang_a,
-            lang_b=lang_b,
-            term_a=term_a,
-            term_b=term_b,
-            high_overlap=high_overlap,
-            lca_is_modern=lca_lang in leaf_langs,
-        )
+        score = assessment.quality
         cand = {
             "leaf_a": leaf_a,
             "leaf_b": leaf_b,

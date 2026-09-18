@@ -21,14 +21,17 @@ from etl.generate import (
     is_proper_noun_leaf,
     leaf_reuse_key,
     make_choices,
-    meaning_overlap,
-    normalize_label,
     prefer_latin_chain_path,
     prepare_score_buckets,
+)
+from etl.ids import puzzle_id
+from etl.quality import (
+    assess_pair,
+    meaning_overlap,
+    normalize_label,
     quality_score,
     shares_meaning,
 )
-from etl.ids import puzzle_id
 from etl.validate import validate_puzzles
 from etl.models import Puzzle, node_id
 
@@ -340,17 +343,60 @@ def test_reduce_edges_drops_unaligned_borrow_keeps_cognate():
     assert ("cognate_of", "Sohn", "German") in pairs
 
 
+def test_reduce_edges_drops_cross_term_leaf_hop_keeps_same_term_loan():
+    """Compound leaf→leaf hops drop; same-term modern loans stay."""
+    df = pd.DataFrame(
+        [
+            dict(term="hipoxia", lang="Spanish", reltype="derived_from", related_term="oxygen", related_lang="English"),
+            dict(term="hipoxia", lang="Spanish", reltype="derived_from", related_term="ὑποξία", related_lang="Ancient Greek"),
+            dict(term="panel", lang="Spanish", reltype="borrowed_from", related_term="panel", related_lang="English"),
+            dict(term="panel", lang="English", reltype="derived_from", related_term="pannus", related_lang="Latin"),
+        ]
+    )
+    cfg = {
+        **_reduce_cfg(),
+        "ancestor_languages": ["Latin", "Ancient Greek"],
+    }
+    out = reduce_edges(df, cfg, parents=None)
+    pairs = set(zip(out["lang"], out["reltype"], out["related_term"], out["related_lang"]))
+    assert ("Spanish", "derived_from", "oxygen", "English") not in pairs
+    assert ("Spanish", "borrowed_from", "panel", "English") in pairs
+    assert ("Spanish", "derived_from", "ὑποξία", "Ancient Greek") in pairs
+
+
 def test_reduce_edges_keeps_latin_intermediate_on_path_to_allowlisted_greek():
     """Templates naming only Greek must not drop a dump Latin hop that reaches Greek."""
     cfg = {
         **_reduce_cfg(),
-        "ancestor_languages": ["Latin", "Ancient Greek", "Old English", "Proto-Germanic"],
+        "ancestor_languages": ["Latin", "Ancient Greek", "Old English", "Proto-Germanic", "Late Latin"],
     }
     df = pd.DataFrame(
         [
             dict(term="historia", lang="Spanish", reltype="borrowed_from", related_term="historia", related_lang="Latin"),
             dict(term="historia", lang="Spanish", reltype="derived_from", related_term="ἱστορία", related_lang="Ancient Greek"),
             dict(term="historia", lang="Latin", reltype="derived_from", related_term="ἱστορία", related_lang="Ancient Greek"),
+            # Late Latin breve spelling with no out-edges; Classical twin reaches Greek.
+            dict(
+                term="apóstrofo",
+                lang="Spanish",
+                reltype="borrowed_from",
+                related_term="apostrŏphus",
+                related_lang="Late Latin",
+            ),
+            dict(
+                term="apóstrofo",
+                lang="Spanish",
+                reltype="derived_from",
+                related_term="ἀπόστροφος",
+                related_lang="Ancient Greek",
+            ),
+            dict(
+                term="apostrophus",
+                lang="Latin",
+                reltype="derived_from",
+                related_term="ἀπόστροφος",
+                related_lang="Ancient Greek",
+            ),
             # Homograph noise: must still drop when not on a path to the allowlist.
             dict(term="son", lang="English", reltype="inherited_from", related_term="sunu", related_lang="Old English"),
             dict(term="son", lang="English", reltype="borrowed_from", related_term="son", related_lang="Spanish"),
@@ -361,12 +407,15 @@ def test_reduce_edges_keeps_latin_intermediate_on_path_to_allowlisted_greek():
         cfg,
         parents={
             "Spanish\thistoria": ["ἱστορία"],
+            "Spanish\tapóstrofo": ["ἀπόστροφος"],
             "English\tson": ["sunu", "*sunuz"],
         },
     )
     pairs = set(zip(out["lang"], out["reltype"], out["related_term"], out["related_lang"]))
     assert ("Spanish", "borrowed_from", "historia", "Latin") in pairs
     assert ("Spanish", "derived_from", "ἱστορία", "Ancient Greek") in pairs
+    assert ("Spanish", "borrowed_from", "apostrŏphus", "Late Latin") in pairs
+    assert ("Spanish", "derived_from", "ἀπόστροφος", "Ancient Greek") in pairs
     assert ("English", "inherited_from", "sunu", "Old English") in pairs
     assert ("English", "borrowed_from", "son", "Spanish") not in pairs
 
@@ -497,6 +546,67 @@ def test_extract_candidates_routes_parallel_der_through_late_latin():
     assert path == ["German:Ökonom", "Late Latin:oeconomus", "Ancient Greek:οἰκονόμος"]
 
 
+def test_extract_candidates_routes_spanish_late_latin_variant_through_latin():
+    """After align, Late Latin breve twin is kept; gold path prefers Latin-family hop."""
+    rows = [
+        dict(
+            term="ap\u00f3strofo",
+            lang="Spanish",
+            reltype="borrowed_from",
+            related_term="apostr\u014fphus",
+            related_lang="Late Latin",
+        ),
+        dict(
+            term="ap\u00f3strofo",
+            lang="Spanish",
+            reltype="derived_from",
+            related_term="\u1f00\u03c0\u03cc\u03c3\u03c4\u03c1\u03bf\u03c6\u03bf\u03c2",
+            related_lang="Ancient Greek",
+        ),
+        dict(
+            term="apostrophus",
+            lang="Latin",
+            reltype="derived_from",
+            related_term="\u1f00\u03c0\u03cc\u03c3\u03c4\u03c1\u03bf\u03c6\u03bf\u03c2",
+            related_lang="Ancient Greek",
+        ),
+        dict(term="Apostroph", lang="German", reltype="borrowed_from", related_term="apostrophus", related_lang="Latin"),
+    ]
+    cfg = {
+        **_reduce_cfg(),
+        "ancestor_languages": ["Latin", "Late Latin", "Ancient Greek"],
+    }
+    df = reduce_edges(
+        pd.DataFrame(rows),
+        cfg,
+        parents={
+            "Spanish\tap\u00f3strofo": ["\u1f00\u03c0\u03cc\u03c3\u03c4\u03c1\u03bf\u03c6\u03bf\u03c2"],
+            "German\tApostroph": ["apostrophus"],
+        },
+    )
+    glosses = {
+        "Spanish\tap\u00f3strofo": "typographic omission mark in Spanish text",
+        "German\tApostroph": "German punctuation for elision",
+        "Late Latin\tapostr\u014fphus": "apostrophe",
+        "Latin\tapostrophus": "apostrophe",
+        "Ancient Greek\t\u1f00\u03c0\u03cc\u03c3\u03c4\u03c1\u03bf\u03c6\u03bf\u03c2": "turned away",
+    }
+    g = build_graph(df, {"inherited_from", "borrowed_from", "derived_from", "root"})
+    extract_cfg = {
+        "leaf_languages": {"English": "en", "Spanish": "es", "Portuguese": "pt", "German": "de"},
+        "ancestor_reltypes": ["inherited_from", "borrowed_from", "derived_from", "root"],
+        "generate": {"max_nodes": 9, "max_gloss_overlap": 0.5},
+    }
+    funnel = Funnel()
+    cands = extract_candidates(g, glosses, extract_cfg, funnel)
+    assert len(cands) == 1
+    gold = {(e.source, e.target) for e in cands[0]["edges"]}
+    assert ("Spanish:ap\u00f3strofo", "Late Latin:apostr\u014fphus") in gold
+    assert ("Late Latin:apostr\u014fphus", "Ancient Greek:\u1f00\u03c0\u03cc\u03c3\u03c4\u03c1\u03bf\u03c6\u03bf\u03c2") in gold
+    assert ("Spanish:ap\u00f3strofo", "Ancient Greek:\u1f00\u03c0\u03cc\u03c3\u03c4\u03c1\u03bf\u03c6\u03bf\u03c2") not in gold
+    assert ("German:Apostroph", "Latin:apostrophus") in gold
+
+
 def test_first_gloss_empty_or_missing_senses():
     assert first_gloss({}) is None
     assert first_gloss({"senses": []}) is None
@@ -532,7 +642,6 @@ def test_meaning_overlap_helpers():
     assert shares_meaning("Gift", "a gift; something given")
     assert not shares_meaning("gift", "poison; a toxic substance")
     assert not shares_meaning("the", "the ancestor sense")
-    # Headword identity (lca_equals_leaf): first content word of term/gloss.
     assert shares_meaning("gift", "gift", head_only=True)
     assert shares_meaning("Gift", "*gift", head_only=True)
     assert shares_meaning("a toxic substance", "a toxic substance", head_only=True)
@@ -553,44 +662,106 @@ def test_puzzle_id_order_invariant():
 
 
 def test_quality_score_is_integer_rubric():
-    base: dict[str, Any] = dict(
-        high_overlap=False, lca_is_modern=False, term_a="alpha", term_b="omega"
+    """Five −1 axes; structural hard rejects stay out of the score."""
+    perfect: dict[str, Any] = dict(
+        term_a="hound",
+        term_b="cadeia",
+        gloss_a="a hunting animal",
+        gloss_b="a metal restraint",
+        lca_term="*rootaz",
+        lca_gloss="ancient ancestral sense",
     )
-    assert quality_score(lang_a="English", lang_b="German", **base) == 5
-    assert quality_score(lang_a="English", lang_b="English", **base) == 2  # −3 same-lang
-    # Spanish–Portuguese only penalized when leaf terms share a 3-char prefix (−2).
-    assert quality_score(lang_a="Spanish", lang_b="Portuguese", **base) == 5
+    assert quality_score(lang_a="English", lang_b="Portuguese", **perfect) == 5
+    assert quality_score(lang_a="English", lang_b="English", **perfect) == 4  # same lang
+    # ES–PT similar spelling is −1 (prefix), not the old −2 special case.
     assert (
         quality_score(
             lang_a="Spanish",
             lang_b="Portuguese",
-            **{**base, "term_a": "hombre", "term_b": "homem"},
+            term_a="hombre",
+            term_b="homem",
+            gloss_a="an adult male person",
+            gloss_b="a gentleman of standing",
+            lca_term="homo",
+            lca_gloss="the species sapiens",
         )
-        == 3
+        == 4
     )
-    assert quality_score(lang_a="English", lang_b="German", **{**base, "lca_is_modern": True}) == 4
-    assert quality_score(lang_a="English", lang_b="German", **{**base, "high_overlap": True}) == 4
-    worst_cross = quality_score(
-        lang_a="Spanish",
-        lang_b="Portuguese",
-        term_a="hombre",
-        term_b="homem",
-        high_overlap=True,
-        lca_is_modern=True,
+    # Gloss↔gloss meaning-vs-LCA (Spanish terms; English glosses).
+    assert (
+        quality_score(
+            lang_a="Spanish",
+            lang_b="Portuguese",
+            term_a="perro",
+            term_b="cadeia",
+            gloss_a="a domestic dog",
+            gloss_b="a prison building",
+            lca_term="canis",
+            lca_gloss="a dog or hound",
+        )
+        == 4
     )
-    assert worst_cross == 1
-    assert isinstance(worst_cross, int)
     assert (
         quality_score(
             lang_a="English",
-            lang_b="English",
+            lang_b="German",
             term_a="gift",
-            term_b="present",
-            high_overlap=True,
-            lca_is_modern=True,
+            term_b="Gift",
+            gloss_a="a present given",
+            gloss_b="a toxic poison",
+            lca_term="*giftiz",
+            lca_gloss="something transferred",
         )
-        == 0
+        == 4
+    )  # similar spelling only
+    # assess_pair: structural + score; soft misses are not hard rejects.
+    ok = assess_pair(
+        lang_a="English",
+        lang_b="German",
+        term_a="hound",
+        gloss_a="a hunting animal",
+        term_b="Gift",
+        gloss_b="a toxic poison",
+        lca_term="*rootaz",
+        lca_gloss="ancient ancestral sense",
     )
+    assert ok.reject is None
+    assert ok.quality == 5
+    same_lang = assess_pair(
+        lang_a="English",
+        lang_b="English",
+        term_a="hound",
+        gloss_a="a hunting animal",
+        term_b="present",
+        gloss_b="a toxic poison",
+        lca_term="*rootaz",
+        lca_gloss="ancient ancestral sense",
+    )
+    assert same_lang.reject is None
+    assert same_lang.quality == 4
+    spelling_lca = assess_pair(
+        lang_a="English",
+        lang_b="German",
+        term_a="rootaz",
+        gloss_a="a hunting animal",
+        term_b="Gift",
+        gloss_b="a toxic poison",
+        lca_term="*rootaz",
+        lca_gloss="ancient ancestral sense",
+    )
+    assert spelling_lca.reject is None
+    assert spelling_lca.quality == 4
+    short = assess_pair(
+        lang_a="English",
+        lang_b="German",
+        term_a="hound",
+        gloss_a="a hunting animal",
+        term_b="Gift",
+        gloss_b="a toxic poison",
+        lca_term="ab",
+        lca_gloss="short root",
+    )
+    assert short.reject == "term_too_short"
 
 
 def test_make_choices_requires_real_distractors():
@@ -760,16 +931,16 @@ def test_extract_candidates_skips_proper_noun_leaves():
 def test_extract_candidates_skips_unrelated_leaf_pairs():
     """Leaves under disjoint ancestors must not inflate pairs_considered."""
     rows = [
-        dict(term="a1", lang="English", reltype="inherited_from", related_term="*ra", related_lang="Proto-Germanic"),
-        dict(term="a2", lang="German", reltype="inherited_from", related_term="*ra", related_lang="Proto-Germanic"),
-        dict(term="b1", lang="Spanish", reltype="inherited_from", related_term="*rb", related_lang="Proto-Germanic"),
-        dict(term="b2", lang="Portuguese", reltype="inherited_from", related_term="*rb", related_lang="Proto-Germanic"),
+        dict(term="alpha1", lang="English", reltype="inherited_from", related_term="*ra", related_lang="Proto-Germanic"),
+        dict(term="alpha2", lang="German", reltype="inherited_from", related_term="*ra", related_lang="Proto-Germanic"),
+        dict(term="beta1x", lang="Spanish", reltype="inherited_from", related_term="*rb", related_lang="Proto-Germanic"),
+        dict(term="beta2x", lang="Portuguese", reltype="inherited_from", related_term="*rb", related_lang="Proto-Germanic"),
     ]
     glosses = {
-        "English\ta1": "modern alpha one",
-        "German\ta2": "modern alpha two",
-        "Spanish\tb1": "modern beta one",
-        "Portuguese\tb2": "modern beta two",
+        "English\talpha1": "modern alpha one",
+        "German\talpha2": "modern alpha two",
+        "Spanish\tbeta1x": "modern beta one",
+        "Portuguese\tbeta2x": "modern beta two",
         "Proto-Germanic\t*ra": "ancient poison ra",
         "Proto-Germanic\t*rb": "ancient venom rb",
     }
@@ -784,7 +955,7 @@ def test_extract_candidates_skips_unrelated_leaf_pairs():
     }
     funnel = Funnel()
     extract_candidates(g, glosses, cfg, funnel)
-    # Naive all-pairs would be C(4,2)=6; related-only is 2 (a1-a2 and b1-b2).
+    # Naive all-pairs would be C(4,2)=6; related-only is 2 (alpha1-alpha2 and beta1x-beta2x).
     assert funnel.counts["pairs_considered"] == 2
 
 
@@ -800,7 +971,7 @@ def _two_leaf_lca_cfg() -> dict[str, Any]:
 
 
 def test_extract_candidates_rejects_short_lca_term():
-    """LCA terms shorter than 3 characters are rejected (funnel: lca_term_too_short)."""
+    """LCA terms shorter than 3 characters are rejected (funnel: term_too_short)."""
     rows = [
         dict(term="leafx", lang="English", reltype="inherited_from", related_term="ab", related_lang="Proto-Germanic"),
         dict(term="leafy", lang="German", reltype="inherited_from", related_term="ab", related_lang="Proto-Germanic"),
@@ -814,8 +985,29 @@ def test_extract_candidates_rejects_short_lca_term():
     funnel = Funnel()
     cands = extract_candidates(g, glosses, _two_leaf_lca_cfg(), funnel)
     assert cands == []
-    assert funnel.counts.get("lca_term_too_short", 0) >= 1
+    assert funnel.counts.get("term_too_short", 0) >= 1
     assert funnel.counts.get("candidates", 0) == 0
+
+
+def test_extract_candidates_rejects_short_leaf_terms():
+    """Short modern leaves (e.g. Portuguese o, Spanish le) are skipped early."""
+    rows = [
+        dict(term="o", lang="Portuguese", reltype="inherited_from", related_term="*rootaz", related_lang="Proto-Germanic"),
+        dict(term="le", lang="Spanish", reltype="inherited_from", related_term="*rootaz", related_lang="Proto-Germanic"),
+        dict(term="leafx", lang="English", reltype="inherited_from", related_term="*rootaz", related_lang="Proto-Germanic"),
+        dict(term="leafy", lang="German", reltype="inherited_from", related_term="*rootaz", related_lang="Proto-Germanic"),
+    ]
+    glosses = {
+        "Portuguese\to": "the masculine article",
+        "Spanish\tle": "the object pronoun",
+        "English\tleafx": "modern sense alpha zebra",
+        "German\tleafy": "modern sense beta quartz",
+        "Proto-Germanic\t*rootaz": "ancient root poison venom",
+    }
+    g = build_graph(pd.DataFrame(rows), {"inherited_from"})
+    funnel = Funnel()
+    extract_candidates(g, glosses, _two_leaf_lca_cfg(), funnel)
+    assert funnel.counts.get("term_too_short", 0) >= 2
 
 
 def test_extract_candidates_rejects_missing_lca_gloss():
@@ -949,76 +1141,71 @@ def test_extract_candidates_rejects_leftover_grammatical_lca_gloss(lca_term, lca
     assert funnel.counts.get("candidates", 0) == 0
 
 
-def test_extract_candidates_rejects_leaf_term_in_lca_gloss():
-    """Both leaves still same meaning when each term appears in the LCA gloss."""
+def test_extract_candidates_scores_gloss_overlap_softly():
+    """Gloss overlap with the LCA is a soft quality penalty, not a hard reject."""
     rows = [
         dict(term="hound", lang="English", reltype="inherited_from", related_term="*hundaz", related_lang="Proto-Germanic"),
-        dict(term="Hund", lang="German", reltype="inherited_from", related_term="*hundaz", related_lang="Proto-Germanic"),
+        dict(term="cadeia", lang="Portuguese", reltype="inherited_from", related_term="*hundaz", related_lang="Proto-Germanic"),
     ]
     glosses = {
         "English\thound": "a hunting dog",
-        "German\tHund": "a domestic animal",
-        "Proto-Germanic\t*hundaz": "an animal such as a hound or hund",
+        "Portuguese\tcadeia": "a metal restraint",
+        "Proto-Germanic\t*hundaz": "a male dog",
     }
     g = build_graph(pd.DataFrame(rows), {"inherited_from"})
     funnel = Funnel()
     cands = extract_candidates(g, glosses, _two_leaf_lca_cfg(), funnel)
-    assert cands == []
-    assert funnel.counts.get("same_meaning", 0) >= 1
-    assert funnel.counts.get("candidates", 0) == 0
+    assert len(cands) >= 1
+    assert cands[0]["quality_score"] == 4  # meaning vs LCA only
+    assert funnel.counts.get("same_meaning", 0) == 0
+    assert funnel.counts.get("lca_equals_leaf", 0) == 0
 
 
 @pytest.mark.parametrize(
-    "leaf_a,leaf_b,lca_term,glosses,reason",
+    "leaf_a,leaf_b,lca_term,glosses,expected_score,reason",
     [
         (
             ("gift", "English"),
-            ("Gift", "German"),
+            ("cadeia", "Portuguese"),
             "*giftiz",
             {
-                "English\tgift": "present",
-                "German\tGift": "poison",
-                "Proto-Germanic\t*giftiz": "present",
+                "English\tgift": "a wrapped present",
+                "Portuguese\tcadeia": "a metal restraint",
+                "Proto-Germanic\t*giftiz": "a wrapped present",
             },
-            "leaf gloss equals LCA gloss",
+            4,
+            "leaf gloss overlaps LCA gloss",
         ),
         (
             ("gift", "English"),
-            ("Gift", "German"),
+            ("cadeia", "Portuguese"),
             "gift",
             {
-                "English\tgift": "modern sense alpha zebra",
-                "German\tGift": "modern sense beta quartz",
+                "English\tgift": "alpha zebra parcel",
+                "Portuguese\tcadeia": "beta quartz restraint",
                 "Proto-Germanic\tgift": "ancient root poison venom",
             },
+            4,
             "leaf term equals LCA term",
         ),
         (
-            ("hound", "English"),
-            ("Hund", "German"),
-            "*hundaz",
-            {
-                "English\thound": "a hunting dog",
-                "German\tHund": "a domestic animal",
-                "Proto-Germanic\t*hundaz": "hound",
-            },
-            "leaf term equals LCA gloss",
-        ),
-        (
             ("gift", "English"),
             ("Gift", "German"),
             "*giftiz",
             {
-                "English\tgift": "giftiz",
-                "German\tGift": "modern sense beta quartz",
+                "English\tgift": "alpha zebra parcel",
+                "German\tGift": "beta quartz toxin",
                 "Proto-Germanic\t*giftiz": "ancient root poison venom",
             },
-            "leaf gloss equals LCA term",
+            4,
+            "similar leaf spellings",
         ),
     ],
 )
-def test_extract_candidates_rejects_leaf_equal_to_lca(leaf_a, leaf_b, lca_term, glosses, reason):
-    """Hard-reject when a leaf term or gloss is identical to the LCA term or gloss."""
+def test_extract_candidates_soft_penalties_not_hard_rejects(
+    leaf_a, leaf_b, lca_term, glosses, expected_score, reason
+):
+    """Former hard rejects for meaning/spelling identity are soft −1 only."""
     term_a, lang_a = leaf_a
     term_b, lang_b = leaf_b
     rows = [
@@ -1028,9 +1215,10 @@ def test_extract_candidates_rejects_leaf_equal_to_lca(leaf_a, leaf_b, lca_term, 
     g = build_graph(pd.DataFrame(rows), {"inherited_from"})
     funnel = Funnel()
     cands = extract_candidates(g, glosses, _two_leaf_lca_cfg(), funnel)
-    assert cands == [], reason
-    assert funnel.counts.get("lca_equals_leaf", 0) >= 1, reason
-    assert funnel.counts.get("candidates", 0) == 0
+    assert len(cands) >= 1, reason
+    assert cands[0]["quality_score"] == expected_score, reason
+    assert funnel.counts.get("lca_equals_leaf", 0) == 0
+    assert funnel.counts.get("same_meaning", 0) == 0
 
 
 def test_extract_candidates_accepts_lca_term_length_three():
@@ -1049,7 +1237,7 @@ def test_extract_candidates_accepts_lca_term_length_three():
     cands = extract_candidates(g, glosses, _two_leaf_lca_cfg(), funnel)
     assert len(cands) >= 1
     assert cands[0]["lca"]["term"] == "abc"
-    assert funnel.counts.get("lca_term_too_short", 0) == 0
+    assert funnel.counts.get("term_too_short", 0) == 0
     assert funnel.counts.get("no_gloss", 0) == 0
 
 

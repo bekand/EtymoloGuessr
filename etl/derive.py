@@ -17,6 +17,20 @@ log = logging.getLogger(__name__)
 EDGE_COLUMNS = ["term", "lang", "reltype", "related_term", "related_lang"]
 MAX_TERM_LENGTH = 80
 
+# Classical / post-classical Latin labels that share lemma spellings across dumps.
+LATIN_FAMILY_LANGS = frozenset(
+    {"Latin", "Late Latin", "Medieval Latin", "Vulgar Latin", "Old Latin"}
+)
+
+
+def _fold_macrons(text: str) -> str:
+    decomposed = unicodedata.normalize("NFD", text)
+    return "".join(ch for ch in decomposed if unicodedata.category(ch) != "Mn")
+
+
+def _folded_term_key(term: Any) -> str:
+    return _fold_macrons(str(term)).casefold()
+
 
 def is_junk_term(term: Any) -> bool:
     if term is None or (isinstance(term, float) and pd.isna(term)):
@@ -81,14 +95,30 @@ def reduce_edges(
     dropped_lang = int((~mask_lang).sum())
     out = out.loc[mask_lang]
     out = out.drop_duplicates(subset=EDGE_COLUMNS)
+
+    # Drop leaf→leaf ancestor hops when the terms differ (compound/component edges
+    # like hipoxia→oxygen). Same-term loans (panel→panel) stay.
+    dropped_leaf_hop = 0
+    leaf_langs = set(cfg["leaf_languages"].keys())
+    if ancestor_reltypes and leaf_langs and not out.empty:
+        is_anc = out["reltype"].isin(ancestor_reltypes)
+        both_leaf = out["lang"].isin(leaf_langs) & out["related_lang"].isin(leaf_langs)
+        term_key = out["term"].map(_folded_term_key)
+        related_key = out["related_term"].map(_folded_term_key)
+        mask_cross = is_anc & both_leaf & (term_key != related_key)
+        dropped_leaf_hop = int(mask_cross.sum())
+        if dropped_leaf_hop:
+            out = out.loc[~mask_cross]
+
     out, drop_align, align_fallback = _align_ancestor_edges(out, parents, ancestor_reltypes)
     log.info(
-        "reduce_edges: in=%s drop_reltype=%s drop_junk=%s drop_lang=%s drop_etym_align=%s "
-        "etym_align_fallback=%s out=%s",
+        "reduce_edges: in=%s drop_reltype=%s drop_junk=%s drop_lang=%s drop_leaf_hop=%s "
+        "drop_etym_align=%s etym_align_fallback=%s out=%s",
         before,
         dropped_rel,
         dropped_junk,
         dropped_lang,
+        dropped_leaf_hop,
         drop_align,
         align_fallback,
         len(out),
@@ -155,27 +185,66 @@ def _build_ancestor_successors(
     return succ
 
 
+def _build_latin_family_aliases(
+    anc: pd.DataFrame,
+) -> dict[str, list[tuple[str, str]]]:
+    """Map macron-folded term → Latin-family (lang, term) nodes in the ancestor graph."""
+    aliases: dict[str, list[tuple[str, str]]] = defaultdict(list)
+    seen: set[tuple[str, str]] = set()
+    for row in anc.itertuples(index=False):
+        for lang, term in (
+            (str(row.lang), str(row.term)),
+            (str(row.related_lang), str(row.related_term)),
+        ):
+            if lang not in LATIN_FAMILY_LANGS:
+                continue
+            node = (lang, term)
+            if node in seen:
+                continue
+            seen.add(node)
+            aliases[_fold_macrons(term)].append(node)
+    return aliases
+
+
 def _reaches_allowlisted(
     start_lang: str,
     start_term: str,
     allow_folded: set[str],
     successors: dict[tuple[str, str], list[tuple[str, str]]],
+    latin_aliases: dict[str, list[tuple[str, str]]] | None = None,
 ) -> bool:
-    """True when ``start`` or a dump-ancestor descendant has an allowlisted term (macron-folded)."""
+    """True when ``start`` or a dump-ancestor descendant has an allowlisted term (macron-folded).
+
+    Latin-family nodes with the same folded spelling share successor walks so
+    ``Late Latin:apostrŏphus`` can reach Greek via ``Latin:apostrophus``.
+    """
     if _fold_macrons(start_term) in allow_folded:
         return True
     start = (start_lang, start_term)
     seen: set[tuple[str, str]] = {start}
     q: deque[tuple[str, str]] = deque([start])
+    latin_aliases = latin_aliases or {}
+
+    def _expand_from(node: tuple[str, str]) -> Iterable[tuple[str, str]]:
+        yield node
+        if node[0] not in LATIN_FAMILY_LANGS:
+            return
+        for alias in latin_aliases.get(_fold_macrons(node[1]), ()):
+            if alias != node:
+                yield alias
+
     while q:
         node = q.popleft()
-        for nxt in successors.get(node, ()):
-            if nxt in seen:
-                continue
-            if _fold_macrons(nxt[1]) in allow_folded:
-                return True
-            seen.add(nxt)
-            q.append(nxt)
+        for base in _expand_from(node):
+            if base not in seen and base != node:
+                seen.add(base)
+            for nxt in successors.get(base, ()):
+                if nxt in seen:
+                    continue
+                if _fold_macrons(nxt[1]) in allow_folded:
+                    return True
+                seen.add(nxt)
+                q.append(nxt)
     return False
 
 
@@ -208,6 +277,7 @@ def _align_ancestor_edges(
     fallback = 0
     anc = df.loc[is_anc]
     successors = _build_ancestor_successors(anc)
+    latin_aliases = _build_latin_family_aliases(anc)
     grouped = anc.groupby(keys.loc[is_anc], sort=False)
     for key, grp in grouped:
         terms = allow.get(str(key))
@@ -220,7 +290,11 @@ def _align_ancestor_edges(
             related_term = str(row["related_term"])
             related_lang = str(row["related_lang"])
             if _fold_macrons(related_term) in allow_folded or _reaches_allowlisted(
-                related_lang, related_term, allow_folded, successors
+                related_lang,
+                related_term,
+                allow_folded,
+                successors,
+                latin_aliases,
             ):
                 keep_rows.append(idx)
         if keep_rows:
@@ -434,11 +508,6 @@ def _redirect_lemma(obj: dict[str, Any]) -> tuple[str | None, str | None]:
     return None, None
 
 
-def _fold_macrons(text: str) -> str:
-    decomposed = unicodedata.normalize("NFD", text)
-    return "".join(ch for ch in decomposed if unicodedata.category(ch) != "Mn")
-
-
 def _lookup_lexical(
     lang: str,
     term: str,
@@ -646,9 +715,7 @@ def index_glosses(
     return index, lemmas, parents
 
 
-_LATIN_FAMILY_GLOSS_LANGS = frozenset(
-    {"Latin", "Late Latin", "Medieval Latin", "Vulgar Latin", "Old Latin"}
-)
+_LATIN_FAMILY_GLOSS_LANGS = LATIN_FAMILY_LANGS
 
 
 def gloss_for(index: dict[str, str], lang: str, term: str) -> str | None:
