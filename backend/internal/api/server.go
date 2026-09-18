@@ -186,6 +186,12 @@ type solveResponse struct {
 	Choices       []puzzle.Choice `json:"choices,omitempty"`
 	CorrectChoice string          `json:"correctChoice,omitempty"`
 	Ancestors     []puzzle.Term   `json:"ancestors,omitempty"`
+	PairOrigins   []pairOrigin    `json:"pairOrigins,omitempty"`
+}
+
+type pairOrigin struct {
+	Pair     [2]puzzle.Term `json:"pair"`
+	Ancestor puzzle.Term    `json:"ancestor"`
 }
 
 func (s *Server) handleSolve(w http.ResponseWriter, r *http.Request) {
@@ -262,7 +268,20 @@ func (s *Server) solveMedium(w http.ResponseWriter, r *http.Request, id string, 
 
 	gold := make([][2]string, 0, puzzle.MediumSetSize)
 	ancestors := make([]puzzle.Term, 0, puzzle.MediumSetSize)
+	pairOrigins := make([]pairOrigin, 0, puzzle.MediumSetSize)
 	for _, p := range puzzles {
+		leafA, decodeErr := puzzle.DecodeTerm(p.LeafA)
+		if decodeErr != nil {
+			s.logger.Error("medium leaf missing", "id", p.ID, "err", decodeErr)
+			writeError(w, http.StatusInternalServerError, "failed to grade puzzle")
+			return
+		}
+		leafB, decodeErr := puzzle.DecodeTerm(p.LeafB)
+		if decodeErr != nil {
+			s.logger.Error("medium leaf missing", "id", p.ID, "err", decodeErr)
+			writeError(w, http.StatusInternalServerError, "failed to grade puzzle")
+			return
+		}
 		gold = append(gold, [2]string{
 			puzzle.LeafToken(p.ID, "a"),
 			puzzle.LeafToken(p.ID, "b"),
@@ -274,11 +293,13 @@ func (s *Server) solveMedium(w http.ResponseWriter, r *http.Request, id string, 
 			return
 		}
 		ancestors = append(ancestors, anc)
+		pairOrigins = append(pairOrigins, pairOrigin{Pair: [2]puzzle.Term{leafA, leafB}, Ancestor: anc})
 	}
 
 	writeJSON(w, http.StatusOK, solveResponse{
-		Correct:   puzzle.PairSetsEqual(gold, submitted),
-		Ancestors: ancestors,
+		Correct:     puzzle.PairSetsEqual(gold, submitted),
+		Ancestors:   ancestors,
+		PairOrigins: pairOrigins,
 	})
 }
 

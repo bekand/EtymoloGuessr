@@ -258,6 +258,7 @@ export function MediumMode() {
               ? {
                   correct: solveMutation.data.correct,
                   ancestors: solveMutation.data.ancestors,
+                  pairOrigins: solveMutation.data.pairOrigins,
                 }
               : undefined
           }

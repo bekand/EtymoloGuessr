@@ -95,4 +95,22 @@ export const mediumSolve: SolveResponse = {
     { lang: 'Proto-Germanic', term: '*giftiz', gloss: 'something given' },
     { lang: 'Proto-Germanic', term: '*hūsą', gloss: 'a dwelling' },
   ],
+  pairOrigins: [
+    {
+      pair: [mediumPrompt.leaves[0], mediumPrompt.leaves[1]],
+      ancestor: { lang: 'Proto-Germanic', term: '*fader', gloss: 'a male parent' },
+    },
+    {
+      pair: [mediumPrompt.leaves[2], mediumPrompt.leaves[3]],
+      ancestor: { lang: 'Proto-Germanic', term: '*hundaz', gloss: 'a dog' },
+    },
+    {
+      pair: [mediumPrompt.leaves[4], mediumPrompt.leaves[5]],
+      ancestor: { lang: 'Proto-Germanic', term: '*giftiz', gloss: 'something given' },
+    },
+    {
+      pair: [mediumPrompt.leaves[6], mediumPrompt.leaves[7]],
+      ancestor: { lang: 'Proto-Germanic', term: '*hūsą', gloss: 'a dwelling' },
+    },
+  ],
 }

@@ -91,6 +91,15 @@ describe('MediumMode', () => {
     expect(screen.getByLabelText('Shared ancestors')).toBeInTheDocument()
     expect(screen.queryByTestId('gold-graph')).not.toBeInTheDocument()
     expect(screen.getByText('*fader')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        (_, element) =>
+          !!(
+            element?.classList.contains('originWords') &&
+            element.textContent?.includes('father')
+          ),
+      ),
+    ).toHaveTextContent('father + Vater')
     expect(screen.getByText('|Streak: 1')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Load the next puzzle' })).toHaveClass('blue')
     await waitFor(() => expect(randomCalls).toBe(2))

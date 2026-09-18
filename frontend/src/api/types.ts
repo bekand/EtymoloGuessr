@@ -52,10 +52,16 @@ export type MediumPrompt = {
   leaves: MediumLeaf[]
 }
 
+export type MediumPairOrigin = {
+  pair: [Term, Term]
+  ancestor: Term
+}
+
 export type SolveResponse = {
   correct: boolean
   correctChoice?: string
   choices?: Choice[]
   goldGraph?: Graph
   ancestors?: Term[]
+  pairOrigins?: MediumPairOrigin[]
 }
