@@ -144,9 +144,10 @@ function HardCanvasBoard({
   const { screenToFlowPosition, fitView, getEdges, getNodes } = useReactFlow()
   const nodesInitialized = useNodesInitialized()
   const pendingFitRef = useRef(false)
-  const cards = paletteNodes(graph, leafA, leafB)
+  const shuffleSeed = graph.nodes.map((node) => node.id).join('|')
+  const cards = shuffle(paletteNodes(graph, leafA, leafB), shuffleSeed)
   const cardById = new Map(graph.nodes.map((node) => [node.id, node]))
-  const tones = shuffle(PALETTE_TONES, graph.nodes.map((node) => node.id).join('|'))
+  const tones = shuffle(PALETTE_TONES, shuffleSeed)
 
   const [nodes, setNodes] = useState<Node<EtymologyNodeData, 'etymology'>[]>([])
   const [edges, setEdges] = useState<Edge[]>([])
