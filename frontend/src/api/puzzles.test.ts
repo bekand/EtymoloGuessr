@@ -5,15 +5,20 @@ import {
   fetchLockedRandomEasy,
   fetchLockedRandomHard,
   fetchLockedRandomMedium,
+  fetchRandomPuzzle,
+  pushRecentPuzzleId,
   readPuzzleLock,
+  readRecentPuzzleIds,
+  recentIdsFromPuzzleId,
   solveEasyPuzzle,
   writePuzzleLock,
 } from '@/api/puzzles'
-import { easyPrompt, hardPrompt, mediumPrompt } from '@/test/fixtures'
+import { easyPrompt, hardPrompt, mediumPrompt, nextEasyPrompt } from '@/test/fixtures'
 import { server } from '@/test/mswServer'
 
 afterEach(() => {
   localStorage.clear()
+  sessionStorage.clear()
 })
 
 describe('puzzle lock', () => {
@@ -94,5 +99,45 @@ describe('puzzle lock', () => {
     expect(live.leaves).toHaveLength(8)
     expect(seen).toEqual([mediumPrompt.id])
     expect(readPuzzleLock('medium')?.leaves).toHaveLength(8)
+  })
+
+  it('passes recent ids as exclude and caps the FIFO at 10', async () => {
+    const urls: string[] = []
+    server.use(
+      http.get(/\/puzzles\/random/, ({ request }) => {
+        urls.push(request.url)
+        return HttpResponse.json(nextEasyPrompt)
+      }),
+    )
+
+    await fetchLockedRandomEasy()
+    expect(readRecentPuzzleIds()).toEqual([nextEasyPrompt.id])
+    await fetchRandomPuzzle('hard')
+    expect(urls).toHaveLength(2)
+    expect(new URL(urls[0]).searchParams.get('exclude')).toBeNull()
+    expect(new URL(urls[1]).searchParams.get('exclude')).toBe(nextEasyPrompt.id)
+
+    sessionStorage.clear()
+    for (let i = 0; i < 12; i++) {
+      pushRecentPuzzleId(`id${i}`)
+    }
+    expect(readRecentPuzzleIds()).toEqual(
+      Array.from({ length: 10 }, (_, i) => `id${i + 2}`),
+    )
+
+    const mediumParts = recentIdsFromPuzzleId(mediumPrompt.id)
+    expect(mediumParts).toHaveLength(4)
+    sessionStorage.clear()
+    urls.length = 0
+    server.use(
+      http.get(/\/puzzles\/random/, ({ request }) => {
+        urls.push(request.url)
+        return HttpResponse.json(mediumPrompt)
+      }),
+    )
+    await fetchLockedRandomMedium()
+    expect(readRecentPuzzleIds()).toEqual(mediumParts)
+    await fetchRandomPuzzle('easy')
+    expect(new URL(urls[1]).searchParams.get('exclude')?.split(',')).toEqual(mediumParts)
   })
 })

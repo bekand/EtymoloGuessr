@@ -262,6 +262,54 @@ func TestRandomEasyHidesGold(t *testing.T) {
 	if _, ok := payload["promptGraph"]; ok {
 		t.Fatalf("easy GET should omit promptGraph; leaves are leafA/leafB: %s", raw)
 	}
+
+	easy := fixturePuzzle()
+	hard := fixtureHardPuzzle()
+	hard2 := fixtureHardPuzzle()
+	hard2.ID = "ghi789ghi789ghi789"
+	srv2 := httptest.NewServer(testHandlerWith(easy, hard, hard2))
+	defer srv2.Close()
+	for i := 0; i < 20; i++ {
+		res2, err := http.Get(srv2.URL + "/puzzles/random?mode=hard&exclude=" + hard.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res2.StatusCode != http.StatusOK {
+			res2.Body.Close()
+			t.Fatalf("status %d", res2.StatusCode)
+		}
+		var got promptResponse
+		if err := json.NewDecoder(res2.Body).Decode(&got); err != nil {
+			res2.Body.Close()
+			t.Fatal(err)
+		}
+		res2.Body.Close()
+		if got.ID == hard.ID {
+			t.Fatalf("exclude ignored, got %q", got.ID)
+		}
+		if got.ID != hard2.ID {
+			t.Fatalf("got %q want %q", got.ID, hard2.ID)
+		}
+	}
+	for i := 0; i < 15; i++ {
+		res2, err := http.Get(srv2.URL + "/puzzles/random?mode=easy&exclude=" + hard.ID + "," + hard2.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res2.StatusCode != http.StatusOK {
+			res2.Body.Close()
+			t.Fatalf("status %d", res2.StatusCode)
+		}
+		var got promptResponse
+		if err := json.NewDecoder(res2.Body).Decode(&got); err != nil {
+			res2.Body.Close()
+			t.Fatal(err)
+		}
+		res2.Body.Close()
+		if got.ID != easy.ID {
+			t.Fatalf("got %q want %q", got.ID, easy.ID)
+		}
+	}
 }
 
 func TestSolveEasy(t *testing.T) {

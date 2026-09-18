@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/bekand/EtymoloGuessr/backend/internal/puzzle"
 	"github.com/jackc/pgx/v5"
@@ -24,6 +25,16 @@ func (s *Store) Ping(ctx context.Context) error {
 }
 
 func (s *Store) RandomPuzzle(ctx context.Context, filter puzzle.Filter) (*puzzle.Puzzle, error) {
+	p, err := s.randomPuzzle(ctx, filter)
+	if errors.Is(err, puzzle.ErrNotFound) && len(filter.ExcludeIDs) > 0 {
+		noExclude := filter
+		noExclude.ExcludeIDs = nil
+		return s.randomPuzzle(ctx, noExclude)
+	}
+	return p, err
+}
+
+func (s *Store) randomPuzzle(ctx context.Context, filter puzzle.Filter) (*puzzle.Puzzle, error) {
 	const q = `
 SELECT id, enabled, leaf_a, leaf_b, answer_graph, choices, correct_choice, quality_score, lang_pair, source
 FROM puzzles
@@ -31,16 +42,28 @@ WHERE enabled = true
   AND ($1::text IS NULL OR lang_pair = $1)
   AND ($2::int IS NULL OR quality_score >= $2)
   AND ($3::int IS NULL OR jsonb_array_length(COALESCE(answer_graph->'nodes', '[]'::jsonb)) >= $3)
+  AND (cardinality($4::text[]) = 0 OR NOT (id = ANY ($4::text[])))
 ORDER BY random()
 LIMIT 1`
 	var langPair *string
 	if filter.LangPair != "" {
 		langPair = &filter.LangPair
 	}
-	return s.scanOne(ctx, q, langPair, filter.MinQuality, filter.MinNodes)
+	exclude := normalizeExclude(filter.ExcludeIDs)
+	return s.scanOne(ctx, q, langPair, filter.MinQuality, filter.MinNodes, exclude)
 }
 
 func (s *Store) RandomPuzzles(ctx context.Context, filter puzzle.Filter, n int) ([]*puzzle.Puzzle, error) {
+	picked, err := s.randomPuzzles(ctx, filter, n)
+	if (errors.Is(err, puzzle.ErrNotFound) || len(picked) < n) && len(filter.ExcludeIDs) > 0 {
+		noExclude := filter
+		noExclude.ExcludeIDs = nil
+		return s.randomPuzzles(ctx, noExclude, n)
+	}
+	return picked, err
+}
+
+func (s *Store) randomPuzzles(ctx context.Context, filter puzzle.Filter, n int) ([]*puzzle.Puzzle, error) {
 	if n <= 0 {
 		return nil, puzzle.ErrNotFound
 	}
@@ -55,13 +78,15 @@ WHERE enabled = true
   AND ($1::text IS NULL OR lang_pair = $1)
   AND ($2::int IS NULL OR quality_score >= $2)
   AND ($3::int IS NULL OR jsonb_array_length(COALESCE(answer_graph->'nodes', '[]'::jsonb)) >= $3)
+  AND (cardinality($4::text[]) = 0 OR NOT (id = ANY ($4::text[])))
 ORDER BY random()
-LIMIT $4`
+LIMIT $5`
 	var langPair *string
 	if filter.LangPair != "" {
 		langPair = &filter.LangPair
 	}
-	rows, err := s.pool.Query(ctx, q, langPair, filter.MinQuality, filter.MinNodes, limit)
+	exclude := normalizeExclude(filter.ExcludeIDs)
+	rows, err := s.pool.Query(ctx, q, langPair, filter.MinQuality, filter.MinNodes, exclude, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -83,6 +108,26 @@ LIMIT $4`
 		return nil, puzzle.ErrNotFound
 	}
 	return picked, nil
+}
+
+func normalizeExclude(ids []string) []string {
+	out := make([]string, 0, len(ids))
+	seen := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	if out == nil {
+		return []string{}
+	}
+	return out
 }
 
 func (s *Store) GetPuzzle(ctx context.Context, id string) (*puzzle.Puzzle, error) {

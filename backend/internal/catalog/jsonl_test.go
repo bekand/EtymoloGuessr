@@ -57,6 +57,35 @@ func TestDisabledSkipped(t *testing.T) {
 	}
 }
 
+func TestRandomExcludeSkipsThenFallsBack(t *testing.T) {
+	store, err := LoadBytes(EmbeddedJSONL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if store.Len() < 2 {
+		t.Fatalf("need at least 2 puzzles, got %d", store.Len())
+	}
+	keep := store.order[0]
+	exclude := append([]string(nil), store.order[1:]...)
+	for i := 0; i < 20; i++ {
+		p, err := store.RandomPuzzle(context.Background(), puzzle.Filter{ExcludeIDs: exclude})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if p.ID != keep {
+			t.Fatalf("iteration %d: got %q want %q", i, p.ID, keep)
+		}
+	}
+	// Excluding everything still returns a puzzle (fallback to full eligible set).
+	p, err := store.RandomPuzzle(context.Background(), puzzle.Filter{ExcludeIDs: append([]string(nil), store.order...)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p == nil || p.ID == "" {
+		t.Fatal("fallback should return a puzzle")
+	}
+}
+
 func TestRandomPuzzlesDistinct(t *testing.T) {
 	store, err := LoadBytes(EmbeddedJSONL)
 	if err != nil {

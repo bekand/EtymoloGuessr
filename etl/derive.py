@@ -332,9 +332,16 @@ _FORM_GLOSS_RE = re.compile(
     r")"
 )
 
+# Pronoun / case-label meta glosses (may appear mid-string, e.g. Latin nōs).
+_META_GLOSS_RE = re.compile(
+    r"(?ix)"
+    r"(?:\bpersonal\s+pronoun\b|\b(?:nominative|genitive|dative|ablative|vocative|locative)\s+case\b)"
+)
+
 # Wiktionary redirect stubs ("alternative form of X"), not lexical meanings.
 # Anchored at start so "One of a number of alternative forms of the same gene…"
-# stays lexical.
+# stays lexical. ``diminutive of`` is a form-stub (may still carry a gloss after
+# a colon; treat as redirect so lookup can unwrap or drop).
 _REDIRECT_GLOSS_RE = re.compile(
     r"(?ix)^(?:"
     r"alternative\s+(?:form|spelling|capitalization|typography)"
@@ -342,7 +349,7 @@ _REDIRECT_GLOSS_RE = re.compile(
     r"|misspelling|common\s+misspelling"
     r"|eye\s+dialect|pronunciation\s+spelling"
     r"|nonstandard\s+form"
-    r"|synonym|abbreviation|initialism|acronym|clipping|ellipsis"
+    r"|synonym|abbreviation|initialism|acronym|clipping|ellipsis|diminutive"
     r")\s+of\b"
 )
 
@@ -386,7 +393,9 @@ def is_grammatical_gloss(text: str | None) -> bool:
     s = text.strip()
     if _CASE_QUALIFIER_RE.match(s) and not _strip_case_qualifier(s):
         return True
-    return bool(_FORM_GLOSS_RE.search(s))
+    if _FORM_GLOSS_RE.search(s):
+        return True
+    return bool(_META_GLOSS_RE.search(s))
 
 
 def is_redirect_gloss(text: str | None) -> bool:

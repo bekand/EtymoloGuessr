@@ -55,6 +55,31 @@ func TestStoreRandomAndGet(t *testing.T) {
 	if high.ID != enabled.ID {
 		t.Fatalf("minQuality filter got %q", high.ID)
 	}
+
+	// Exclude the only de-en high-quality row; with alternatives filtered out, fallback still returns it.
+	excluded, err := store.RandomPuzzle(ctx, puzzle.Filter{
+		LangPair:   "de-en",
+		MinQuality: &minQ,
+		ExcludeIDs: []string{enabled.ID},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if excluded.ID != enabled.ID {
+		t.Fatalf("exclude fallback got %q", excluded.ID)
+	}
+
+	// Exclude spanish so langPair en-es with empty exclude-alternative falls back; exclude other id leaves spanish.
+	onlySpanish, err := store.RandomPuzzle(ctx, puzzle.Filter{
+		LangPair:   "en-es",
+		ExcludeIDs: []string{enabled.ID, disabled.ID, lowQ.ID},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if onlySpanish.ID != spanish.ID {
+		t.Fatalf("exclude skip got %q", onlySpanish.ID)
+	}
 }
 
 func TestStoreMinNodesFilter(t *testing.T) {

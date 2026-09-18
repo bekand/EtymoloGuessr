@@ -33,6 +33,10 @@ log = logging.getLogger(__name__)
 # capitalizes all nouns). Applied only to modern leaf languages in this set.
 _PROPER_NOUN_CASE_LANGS = frozenset({"English", "Spanish", "Portuguese"})
 
+# Modern languages that may be puzzle leaves but must not appear as gold-graph
+# intermediates (loan hops like Spanish→English→Latin).
+_MODERN_LEAF_LANGS = frozenset({"English", "Spanish", "Portuguese", "German"})
+
 
 def is_proper_noun_leaf(lang: str, term: str) -> bool:
     """True when a leaf term looks like a proper noun (initial uppercase letter).
@@ -96,6 +100,17 @@ def subgraph_from_paths(path_a: list[str], path_b: list[str]) -> list[str]:
         if n not in seen:
             seen.append(n)
     return seen
+
+
+def _edges_from_paths(g: nx.DiGraph, path_a: list[str], path_b: list[str]) -> list[GraphEdge]:
+    edges: list[GraphEdge] = []
+    for path in (path_a, path_b):
+        for src, dst in zip(path, path[1:]):
+            rel = g.edges[src, dst].get("reltype")
+            edge = GraphEdge(source=src, target=dst, reltype=rel)
+            if not any(e.source == src and e.target == dst for e in edges):
+                edges.append(edge)
+    return edges
 
 
 def _latin_family_neighbors(g: nx.DiGraph, leaf_id: str) -> list[str]:
@@ -523,14 +538,28 @@ def extract_candidates(
         node_list: list[str] = []
         path_a: list[str] = []
         path_b: list[str] = []
+        edges: list[GraphEdge] = []
+        leaf_ids = {leaf_a_id, leaf_b_id}
         for lca_node_id in ranked:
-            nodes = subgraph_from_paths(paths_a[lca_node_id], paths_b[lca_node_id])
-            if len(nodes) > max_nodes:
+            trial_a = paths_a[lca_node_id]
+            trial_b = paths_b[lca_node_id]
+            trial_nodes = subgraph_from_paths(trial_a, trial_b)
+            trial_edges = _edges_from_paths(g, trial_a, trial_b)
+            trial_nodes, trial_edges, trial_lca = unify_same_gloss_ancestors(
+                trial_nodes,
+                trial_edges,
+                g=g,
+                glosses=glosses,
+                leaf_ids=leaf_ids,
+                lca_id=lca_node_id,
+            )
+            if len(trial_nodes) > max_nodes:
                 continue
-            chosen = lca_node_id
-            node_list = nodes
-            path_a = paths_a[lca_node_id]
-            path_b = paths_b[lca_node_id]
+            chosen = trial_lca
+            node_list = trial_nodes
+            path_a = trial_a
+            path_b = trial_b
+            edges = trial_edges
             break
         if chosen is None:
             funnel.bump("too_big")
@@ -545,12 +574,32 @@ def extract_candidates(
             )
             lca_lang = g.nodes[chosen]["lang"]
             lca_term = g.nodes[chosen]["term"]
+            edges = _edges_from_paths(g, path_a, path_b)
+            node_list, edges, chosen = unify_same_gloss_ancestors(
+                node_list,
+                edges,
+                g=g,
+                glosses=glosses,
+                leaf_ids=leaf_ids,
+                lca_id=chosen,
+            )
         path_a = prefer_latin_chain_path(g, path_a, chosen)
         path_b = prefer_latin_chain_path(g, path_b, chosen)
         node_list = subgraph_from_paths(path_a, path_b)
+        edges = _edges_from_paths(g, path_a, path_b)
+        node_list, edges, chosen = unify_same_gloss_ancestors(
+            node_list,
+            edges,
+            g=g,
+            glosses=glosses,
+            leaf_ids=leaf_ids,
+            lca_id=chosen,
+        )
         if len(node_list) > max_nodes:
             funnel.bump("too_big")
             continue
+        lca_lang = g.nodes[chosen]["lang"]
+        lca_term = g.nodes[chosen]["term"]
         lca_gloss = gloss_for(glosses, lca_lang, lca_term)
         assessment = assess_pair(
             lang_a=lang_a,
@@ -566,29 +615,26 @@ def extract_candidates(
             funnel.bump(assessment.reject)
             continue
 
-        edges: list[GraphEdge] = []
-        for path in (path_a, path_b):
-            for src, dst in zip(path, path[1:]):
-                rel = g.edges[src, dst].get("reltype")
-                edge = GraphEdge(source=src, target=dst, reltype=rel)
-                if not any(e.source == src and e.target == dst for e in edges):
-                    edges.append(edge)
-
-        leaf_ids = {leaf_a_id, leaf_b_id}
-        node_list, edges, chosen = unify_same_gloss_ancestors(
-            node_list,
-            edges,
-            g=g,
-            glosses=glosses,
-            leaf_ids=leaf_ids,
-            lca_id=chosen,
-        )
-        if len(node_list) > max_nodes:
-            funnel.bump("too_big")
+        modern_ancestor = False
+        nonlexical = False
+        for nid in node_list:
+            if nid in leaf_ids:
+                continue
+            lang = g.nodes[nid]["lang"]
+            term = g.nodes[nid]["term"]
+            if lang in _MODERN_LEAF_LANGS:
+                modern_ancestor = True
+                break
+            gloss = gloss_for(glosses, lang, term) if nid != chosen else lca_gloss
+            if gloss and (is_grammatical_gloss(gloss) or is_redirect_gloss(gloss)):
+                nonlexical = True
+                break
+        if modern_ancestor:
+            funnel.bump("modern_lang_ancestor")
             continue
-        lca_lang = g.nodes[chosen]["lang"]
-        lca_term = g.nodes[chosen]["term"]
-        lca_gloss = gloss_for(glosses, lca_lang, lca_term)
+        if nonlexical:
+            funnel.bump("nonlexical_ancestor")
+            continue
 
         key = tuple(sorted([leaf_a_id, leaf_b_id]) + [chosen])
         if key in seen_pairs:

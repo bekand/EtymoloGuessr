@@ -59,7 +59,10 @@ func (s *Server) handleRandom(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	filter := puzzle.Filter{LangPair: strings.TrimSpace(r.URL.Query().Get("langPair"))}
+	filter := puzzle.Filter{
+		LangPair:   strings.TrimSpace(r.URL.Query().Get("langPair")),
+		ExcludeIDs: parseExcludeIDs(r.URL.Query()["exclude"]),
+	}
 	if raw := strings.TrimSpace(r.URL.Query().Get("minQuality")); raw != "" {
 		n, convErr := strconv.Atoi(raw)
 		if convErr != nil {
@@ -109,6 +112,26 @@ func (s *Server) handleRandom(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, promptPayload(p, mode))
+}
+
+// parseExcludeIDs accepts repeated exclude= query values and comma-separated lists.
+func parseExcludeIDs(values []string) []string {
+	var out []string
+	seen := make(map[string]struct{})
+	for _, raw := range values {
+		for _, part := range strings.Split(raw, ",") {
+			id := strings.TrimSpace(part)
+			if id == "" {
+				continue
+			}
+			if _, ok := seen[id]; ok {
+				continue
+			}
+			seen[id] = struct{}{}
+			out = append(out, id)
+		}
+	}
+	return out
 }
 
 func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {

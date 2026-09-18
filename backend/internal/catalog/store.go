@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand/v2"
+	"strings"
 
 	"github.com/bekand/EtymoloGuessr/backend/internal/puzzle"
 )
@@ -44,13 +45,28 @@ func (s *MemoryStore) Len() int {
 }
 
 func (s *MemoryStore) matching(filter puzzle.Filter) []*puzzle.Puzzle {
+	exclude := make(map[string]struct{}, len(filter.ExcludeIDs))
+	for _, id := range filter.ExcludeIDs {
+		id = strings.TrimSpace(id)
+		if id != "" {
+			exclude[id] = struct{}{}
+		}
+	}
 	var matches []*puzzle.Puzzle
+	var fallback []*puzzle.Puzzle
 	for _, id := range s.order {
 		p := s.byID[id]
 		if !matchesFilter(p, filter) {
 			continue
 		}
+		fallback = append(fallback, p)
+		if _, skip := exclude[p.ID]; skip {
+			continue
+		}
 		matches = append(matches, p)
+	}
+	if len(matches) == 0 {
+		return fallback
 	}
 	return matches
 }
@@ -68,15 +84,24 @@ func (s *MemoryStore) RandomPuzzles(_ context.Context, filter puzzle.Filter, n i
 		return nil, puzzle.ErrNotFound
 	}
 	matches := s.matching(filter)
-	if len(matches) < n {
-		return nil, puzzle.ErrNotFound
+	picked := puzzle.SelectDistinctLeaves(shuffleCopy(matches), n)
+	if len(picked) < n && len(filter.ExcludeIDs) > 0 {
+		// Exclusion left too few distinct-leaf puzzles; retry without exclude.
+		noExclude := filter
+		noExclude.ExcludeIDs = nil
+		matches = s.matching(noExclude)
+		picked = puzzle.SelectDistinctLeaves(shuffleCopy(matches), n)
 	}
-	rand.Shuffle(len(matches), func(i, j int) { matches[i], matches[j] = matches[j], matches[i] })
-	picked := puzzle.SelectDistinctLeaves(matches, n)
 	if len(picked) < n {
 		return nil, puzzle.ErrNotFound
 	}
 	return picked, nil
+}
+
+func shuffleCopy(in []*puzzle.Puzzle) []*puzzle.Puzzle {
+	out := append([]*puzzle.Puzzle(nil), in...)
+	rand.Shuffle(len(out), func(i, j int) { out[i], out[j] = out[j], out[i] })
+	return out
 }
 
 func (s *MemoryStore) GetPuzzle(_ context.Context, id string) (*puzzle.Puzzle, error) {

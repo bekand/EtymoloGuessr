@@ -19,8 +19,63 @@ const LOCK_KEYS: Record<PuzzleMode, string> = {
   medium: 'etymologuessr:medium-puzzle',
 }
 
+const RECENT_IDS_KEY = 'etymologuessr:recent-puzzle-ids'
+const RECENT_IDS_MAX = 10
+
 export function isPuzzleNotFound(error: unknown): boolean {
   return error instanceof ApiError && error.status === 404
+}
+
+export function readRecentPuzzleIds(): string[] {
+  try {
+    const raw = sessionStorage.getItem(RECENT_IDS_KEY)
+    if (!raw) {
+      return []
+    }
+    const parsed = JSON.parse(raw) as unknown
+    if (!Array.isArray(parsed)) {
+      sessionStorage.removeItem(RECENT_IDS_KEY)
+      return []
+    }
+    return parsed.filter((id): id is string => typeof id === 'string' && id.length > 0).slice(-RECENT_IDS_MAX)
+  } catch {
+    sessionStorage.removeItem(RECENT_IDS_KEY)
+    return []
+  }
+}
+
+export function pushRecentPuzzleId(id: string): void {
+  const trimmed = id.trim()
+  if (!trimmed) {
+    return
+  }
+  const next = readRecentPuzzleIds().filter((existing) => existing !== trimmed)
+  next.push(trimmed)
+  sessionStorage.setItem(RECENT_IDS_KEY, JSON.stringify(next.slice(-RECENT_IDS_MAX)))
+}
+
+/** Expand a medium set id into its component puzzle ids; otherwise return [id]. */
+export function recentIdsFromPuzzleId(id: string): string[] {
+  const parts = id.split(',').map((p) => p.trim()).filter(Boolean)
+  if (parts.length === 4) {
+    return parts
+  }
+  return id.trim() ? [id.trim()] : []
+}
+
+function pushRecentFromPuzzleId(id: string): void {
+  for (const part of recentIdsFromPuzzleId(id)) {
+    pushRecentPuzzleId(part)
+  }
+}
+
+function randomPuzzleUrl(mode: PuzzleMode): string {
+  const params = new URLSearchParams({ mode })
+  const recent = readRecentPuzzleIds()
+  if (recent.length > 0) {
+    params.set('exclude', recent.join(','))
+  }
+  return `/puzzles/random?${params.toString()}`
 }
 
 function isValidEasyHardLock(parsed: PuzzlePrompt): boolean {
@@ -109,7 +164,7 @@ export function clearHardPuzzleLock(): void {
 export function fetchRandomPuzzle(mode: 'easy' | 'hard'): Promise<PuzzlePrompt>
 export function fetchRandomPuzzle(mode: 'medium'): Promise<MediumPrompt>
 export function fetchRandomPuzzle(mode: PuzzleMode): Promise<PuzzlePrompt | MediumPrompt> {
-  return apiJson(`/puzzles/random?mode=${mode}`)
+  return apiJson(randomPuzzleUrl(mode))
 }
 
 export function fetchPuzzleById(id: string, mode: 'easy' | 'hard'): Promise<PuzzlePrompt>
@@ -133,6 +188,7 @@ async function fetchLockedRandomEasyHard(mode: 'easy' | 'hard'): Promise<PuzzleP
     }
   }
   const puzzle = await fetchRandomPuzzle(mode)
+  pushRecentFromPuzzleId(puzzle.id)
   writePuzzleLock(mode, puzzle)
   return puzzle
 }
@@ -164,6 +220,7 @@ async function fetchLockedMedium(): Promise<MediumPrompt> {
     }
   }
   const puzzle = await fetchRandomPuzzle('medium')
+  pushRecentFromPuzzleId(puzzle.id)
   writePuzzleLock('medium', puzzle)
   return puzzle
 }

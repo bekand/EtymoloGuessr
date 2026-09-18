@@ -87,6 +87,8 @@ Default `--min-quality` is config `generate.min_quality` (currently 4), so a puz
 - **Short / unglossed terms** — leaf or LCA headwords shorter than 3 characters are skipped (`term_too_short`); missing LCA gloss uses existing `no_gloss`; missing leaf gloss uses `no_gloss_leaf`.
 - **Form-only LCA** — if the closest ancestor is only a grammatical form (infinitive, supine, inflected case, …) and Wiktionary points at a citation lemma, the gold node is replaced by that lemma and the multiple-choice answer uses the lemma’s meaning. Homographs with a real lexical sense (Latin *factum* “deed”) are left alone. Glosses that still look like `accusative … of …` or `[with genitive]` are rejected (`inflection_lca`). Redirect stubs (`alternative form of …`, `synonym of …`, …) inherit the target lemma’s meaning at index/lookup time but **do not** rewrite the gold node spelling (Old French *amirail* stays *amirail*). Unresolved redirects are dropped via `no_gloss` / `no_gloss_leaf` and never used as distractors.
 - **Hard rejects (structural only)** — `term_too_short`, `no_gloss`, `inflection_lca`. Divergence (meaning, spelling, same language) is scored, not hard-rejected.
+- **Modern-language ancestors** — intermediate (non-leaf) nodes in English / Spanish / Portuguese / German are rejected (`modern_lang_ancestor`); gold paths must go through historical ancestors only.
+- **Nonlexical ancestor glosses** — any ancestor whose gloss is still grammatical (`personal pronoun`, `… case`, …) or an unresolved redirect stub (including `diminutive of …`) is rejected (`nonlexical_ancestor` / `inflection_lca`).
 - **Unify same-gloss ancestors** — before emit, collapse duplicate ancestor nodes that share an exact gloss: (1) same language with different spelling (`Latin:planēta` / `Latin:planeta`), or (2) Latin-family langs with the same macron-folded spelling (`Latin:bursa` / `Late Latin:bursa`). Prefer the LCA if present, else Classical `Latin`, else the diacritic form. Edges are remapped; self-loops dropped.
 - **Leaf reuse** — within one `generate` batch, each `(lang, term)` may appear as a leaf in at most one emitted puzzle (`leaf_reuse`), so `--n 10` does not repeat the same word ten times.
 - **English vs non-English emit** — after quality filter, candidates are split into English-involving vs other pairs, each bucket is seed-shuffled, then water-filled so `de-en` A-words do not lock shared leaves before `de-es` / `es-pt` / … Extraction also shuffles leaves within each ancestor group and (for finite `--n`) keeps walking until both buckets have headroom.
@@ -159,7 +161,7 @@ cp data/puzzles/puzzles.jsonl backend/internal/catalog/puzzles.jsonl
 
 With `--n > 0`, candidate search **early-exits** once enough quality survivors are found (and only walks leaf pairs that share an ancestor). Use `--n 0` for a full pass. Early exit can change which top-N puzzles you get versus an exhaustive quality sort over every pair.
 
-Rejection reasons in the funnel include `no_gloss`, `term_too_short`, `inflection_lca`, `too_big`, `no_lca`, `proper_noun_leaf`, `below_min_quality`, `leaf_reuse`, `insufficient_distractors`, `early_exit`.
+Rejection reasons in the funnel include `no_gloss`, `term_too_short`, `inflection_lca`, `nonlexical_ancestor`, `modern_lang_ancestor`, `too_big`, `no_lca`, `proper_noun_leaf`, `below_min_quality`, `leaf_reuse`, `insufficient_distractors`, `early_exit`.
 
 ### `etl reset`
 

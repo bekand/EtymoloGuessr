@@ -83,6 +83,7 @@ type Filter struct {
 	LangPair   string
 	MinQuality *int
 	MinNodes   *int
+	ExcludeIDs []string
 }
 
 type Store interface {

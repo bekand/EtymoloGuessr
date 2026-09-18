@@ -145,6 +145,14 @@ def test_first_gloss_skips_grammatical_forms_without_form_of():
     assert first_gloss({"senses": [{"glosses": ["[with genitive]"]}]}) is None
     assert is_grammatical_gloss("[with genitive]")
     assert not is_grammatical_gloss("[α]_D, the angle of rotation")
+    assert is_grammatical_gloss(
+        "I; first person singular personal pronoun, nominative case"
+    )
+    assert is_grammatical_gloss("nominative case of ego")
+    assert not is_grammatical_gloss("a small measure or interval")
+    assert is_redirect_gloss('diminutive of modus (“measure”)')
+    assert is_redirect_gloss("diminutive of opus")
+    assert not is_redirect_gloss("a diminutive form used affectionately")
 
 
 def test_index_glosses_inherits_form_only_lemma():
@@ -1364,6 +1372,50 @@ def test_unify_same_gloss_prefers_lca_even_over_classical_latin():
         ("Spanish:bolsa", "Late Latin:bursa"),
         ("English:purse", "Late Latin:bursa"),
     }
+
+
+def test_extract_candidates_rejects_modern_lang_ancestor():
+    """Intermediate nodes in EN/ES/PT/DE are rejected even if not puzzle leaves."""
+    rows = [
+        dict(term="boceta", lang="Spanish", reltype="borrowed_from", related_term="box", related_lang="English"),
+        dict(term="box", lang="English", reltype="inherited_from", related_term="*buksą", related_lang="Proto-Germanic"),
+        dict(term="Büchse", lang="German", reltype="inherited_from", related_term="*buksą", related_lang="Proto-Germanic"),
+    ]
+    glosses = {
+        "Spanish\tboceta": "small box container",
+        "German\tBüchse": "tin can container",
+        "English\tbox": "three dimensional container object",
+        "Proto-Germanic\t*buksą": "ancient hollow vessel",
+    }
+    g = build_graph(pd.DataFrame(rows), {"inherited_from", "borrowed_from"})
+    # Omit English from leaf_languages so box is only reachable as an intermediate.
+    cfg = {
+        "leaf_languages": {"Spanish": "es", "German": "de"},
+        "ancestor_reltypes": ["inherited_from", "borrowed_from", "derived_from", "root"],
+        "generate": {"max_nodes": 9, "max_gloss_overlap": 0.5},
+    }
+    funnel = Funnel()
+    cands = extract_candidates(g, glosses, cfg, funnel)
+    assert cands == []
+    assert funnel.counts.get("modern_lang_ancestor", 0) >= 1
+
+
+def test_extract_candidates_rejects_nonlexical_ancestor_gloss():
+    """Grammatical LCA glosses are dropped (gloss_for → None → no_gloss)."""
+    rows = [
+        dict(term="nosotros", lang="Spanish", reltype="inherited_from", related_term="nōs", related_lang="Latin"),
+        dict(term="nós", lang="Portuguese", reltype="inherited_from", related_term="nōs", related_lang="Latin"),
+    ]
+    glosses = {
+        "Spanish\tnosotros": "the people speaking collectively",
+        "Portuguese\tnós": "the speakers as a group",
+        "Latin\tnōs": "I; first person singular personal pronoun, nominative case",
+    }
+    g = build_graph(pd.DataFrame(rows), {"inherited_from"})
+    funnel = Funnel()
+    cands = extract_candidates(g, glosses, _two_leaf_lca_cfg(), funnel)
+    assert cands == []
+    assert funnel.counts.get("no_gloss", 0) >= 1
 
 
 def test_extract_candidates_accepts_lca_term_length_three():
