@@ -1,8 +1,8 @@
 # EtymoloGuessr frontend
 
-React + TypeScript + Vite UI for EtymoloGuessr. Paper/ink design tokens, primitives, and playable Easy and Hard modes on React Router (`/`, `/easy`, `/hard`).
+React + TypeScript + Vite UI for EtymoloGuessr. Paper/ink design tokens, primitives, and playable Easy, Medium, and Hard modes on React Router (`/`, `/easy`, `/medium`, `/hard`).
 
-Easy is two modern words and a four-way meaning choice; Hard is a graph editor. Both talk to the Go API, then share a read-only etymology graph after submit.
+Easy is two modern words and a four-way meaning choice; Medium is an eight-word pairing board; Hard is a graph editor. All modes talk to the Go API, then share graph or ancestor feedback after submit.
 
 ## Stack
 
@@ -12,7 +12,7 @@ Easy is two modern words and a four-way meaning choice; Hard is a graph editor. 
 - IBM Plex Mono + Serif (`@fontsource`)
 - TanStack Query for puzzle fetch / solve
 - React Flow (`@xyflow/react`) for the Hard blotter and the post-submit graph
-- React Router (`/`, `/easy`, `/hard`)
+- React Router (`/`, `/easy`, `/medium`, `/hard`)
 
 ## Scripts
 
@@ -30,11 +30,11 @@ Dev expects the API at `http://localhost:8080`. The client calls `/puzzles/...`;
 
 ## Production image
 
-[`Dockerfile`](Dockerfile) builds the Vite app, then serves `dist` with Caddy (`try_files` so `/easy` and `/hard` work). [`Caddyfile`](Caddyfile) listens on `PORT` (default 8080). Pass `VITE_API_URL` as a **build-arg**. Do not put the frontend in local Compose; `pnpm dev` is the play loop.
+[`Dockerfile`](Dockerfile) builds the Vite app, then serves `dist` with Caddy (`try_files` so `/easy`, `/medium`, and `/hard` work). [`Caddyfile`](Caddyfile) listens on `PORT` (default 8080). Pass `VITE_API_URL` as a **build-arg**. Do not put the frontend in local Compose; `pnpm dev` is the play loop.
 
 ## Tests
 
-`pnpm test` runs Vitest (shuffle/layout units, puzzle-lock + EasyMode with MSW). `pnpm test:e2e` runs Playwright Easy and Hard journeys against `docker-compose.test.yml` (see the root README). Install the browser once with `pnpm exec playwright install chromium`.
+`pnpm test` runs Vitest (shuffle/layout units, puzzle-lock, and mode tests with MSW). `pnpm test:e2e` runs Playwright journeys against `docker-compose.test.yml` (see the root README). Install the browser once with `pnpm exec playwright install chromium`.
 
 ## Layout
 
@@ -47,8 +47,9 @@ src/
   ui/              # Sheet, IndexCard, PostIt, InkButton, Stamp, Colophon
     graph/         # EtymologyGraph, EtymologyNode, InkEdge
   features/
-    home/          # Home sheet + Easy / Hard stamps
+    home/          # Home sheet + Easy / Medium / Hard stamps
     easy/          # live MC puzzle + graph reveal
+    medium/        # eight-word pairing board + ancestor feedback
     hard/          # HardMode + HardCanvas (palette, place, connect)
     feedback/      # shared verdict + gold graph
 ```
@@ -69,6 +70,13 @@ src/
 4. Submit is disabled until every node is placed (hint: “Build the graph!”). Score is an exact directed edge-set match (ignore order and `reltype`).
 5. After submit, the same `FeedbackScreen` as Easy: verdict + read-only gold graph with relation labels.
 
+## Medium mode
+
+1. `GET /puzzles/random?mode=medium` returns a set of four puzzles and eight opaque leaf tokens.
+2. The current set is locked in `localStorage`; reload re-fetches the set by its comma-separated id. A `404` clears the lock.
+3. Select two words at a time to form four pairs. Pair order does not matter when grading.
+4. After submit, feedback shows whether the pairing was correct and the shared ancestor for each pair.
+
 ## Design notes
 
-Light paper sheets, darker ink, low-sat post-its, rectangular stamp actions. No dark theme. Language is an ink stamp on a card (`EN`, `DE`), not a color-coded rainbow. Attribution colophon (CC BY-SA / Wiktionary + etymology-db) on every screen. Home Easy / Hard stamps are both live.
+Light paper sheets, darker ink, low-sat post-its, rectangular stamp actions. No dark theme. Language is an ink stamp on a card (`EN`, `DE`), not a color-coded rainbow. Attribution colophon (CC BY-SA / Wiktionary + etymology-db) appears on every screen. The home screen links to all three modes.

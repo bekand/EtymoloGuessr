@@ -130,7 +130,7 @@ def reduce_edges(
 _PARENT_TEMPLATE_NAMES = frozenset({"inh", "bor", "der", "root"})
 
 
-def _template_arg(args: dict[str, Any], key: str) -> str:
+def _template_arg(args: dict[Any, Any], key: str) -> str:
     raw = args.get(key)
     if raw is None:
         try:
@@ -563,6 +563,31 @@ def _resolve_lemma_gloss(
     return None
 
 
+def _apply_pending_glosses(
+    pending: dict[str, str],
+    index: dict[str, str],
+    all_pending: dict[str, str],
+    folded: dict[str, tuple[str, str]],
+    *,
+    lemmas: dict[str, str] | None = None,
+    inline_fallback: dict[str, str] | None = None,
+) -> None:
+    """Resolve pending form or redirect entries into the lexical index."""
+    for key, lemma in pending.items():
+        if key in index:
+            continue
+        lang, term = key.split("\t", 1)
+        resolved = _resolve_lemma_gloss(lang, lemma, index, all_pending, folded)
+        if resolved:
+            canon, gloss = resolved
+            index[key] = gloss
+            if lemmas is not None and canon != term:
+                lemmas[key] = canon
+            continue
+        if inline_fallback and key in inline_fallback:
+            index[key] = inline_fallback[key]
+
+
 def _unwrap_redirect_text(
     index: dict[str, str],
     lang: str,
@@ -667,31 +692,22 @@ def index_gloss_objects(
     all_pending = {**pending, **pending_redirect}
 
     lemmas: dict[str, str] = {}
-    for key, lemma in pending.items():
-        if key in index:
-            continue
-        lang, term = key.split("\t", 1)
-        resolved = _resolve_lemma_gloss(lang, lemma, index, all_pending, folded)
-        if not resolved:
-            continue
-        canon, gloss = resolved
-        index[key] = gloss
-        if canon != term:
-            lemmas[key] = canon
-
-    for key, lemma in pending_redirect.items():
-        if key in index:
-            continue
-        lang, term = key.split("\t", 1)
-        resolved = _resolve_lemma_gloss(lang, lemma, index, all_pending, folded)
-        if resolved:
-            _canon, gloss = resolved
-            index[key] = gloss
-            # Intentionally omit from lemma_index: keep surface form in the gold graph.
-            continue
-        inline = redirect_inline.get(key)
-        if inline:
-            index[key] = inline
+    _apply_pending_glosses(
+        pending,
+        index,
+        all_pending,
+        folded,
+        lemmas=lemmas,
+    )
+    # Redirects keep their surface form in the gold graph, so they do not
+    # contribute entries to lemma_index.
+    _apply_pending_glosses(
+        pending_redirect,
+        index,
+        all_pending,
+        folded,
+        inline_fallback=redirect_inline,
+    )
 
     return index, lemmas, parents
 

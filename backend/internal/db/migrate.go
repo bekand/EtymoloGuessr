@@ -65,22 +65,24 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 			return err
 		}
 		up := upSection(string(raw))
-		conn, err := pool.Acquire(ctx)
-		if err != nil {
-			return err
-		}
-		_, err = conn.Exec(ctx, up, pgx.QueryExecModeSimpleProtocol)
-		if err != nil {
-			conn.Release()
-			return fmt.Errorf("migration %s: %w", name, err)
-		}
-		_, err = conn.Exec(ctx, `INSERT INTO schema_migrations (version) VALUES ($1)`, name)
-		conn.Release()
-		if err != nil {
+		if err := applyMigration(ctx, pool, name, up); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func applyMigration(ctx context.Context, pool *pgxpool.Pool, name, up string) error {
+	conn, err := pool.Acquire(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+	if _, err := conn.Exec(ctx, up, pgx.QueryExecModeSimpleProtocol); err != nil {
+		return fmt.Errorf("migration %s: %w", name, err)
+	}
+	_, err = conn.Exec(ctx, `INSERT INTO schema_migrations (version) VALUES ($1)`, name)
+	return err
 }
 
 func upSection(sql string) string {

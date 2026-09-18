@@ -185,19 +185,6 @@ func EdgeSetsEqual(gold, submitted []Edge) bool {
 	return true
 }
 
-func edgeSet(edges []Edge) map[string]bool {
-	out := make(map[string]bool, len(edges))
-	for _, e := range edges {
-		from := strings.TrimSpace(e.From)
-		to := strings.TrimSpace(e.To)
-		if from == "" || to == "" {
-			continue
-		}
-		out[from+"\x00"+to] = true
-	}
-	return out
-}
-
 func ChoiceCorrect(p *Puzzle, choiceID string) bool {
 	return p != nil && choiceID != "" && choiceID == p.CorrectChoice
 }
@@ -312,16 +299,6 @@ func ParseMediumSetID(id string) ([]string, error) {
 	return out, nil
 }
 
-// firstDigitInID matches the frontend shuffle seed (first digit in the id, else 0).
-func firstDigitInID(id string) int {
-	for _, r := range id {
-		if r >= '0' && r <= '9' {
-			return int(r - '0')
-		}
-	}
-	return 0
-}
-
 // ShuffleByID is a deterministic Fisher–Yates variant matching frontend shuffle().
 func ShuffleByID[T any](items []T, id string) []T {
 	next := append([]T(nil), items...)
@@ -361,4 +338,27 @@ func SelectDistinctLeaves(candidates []*Puzzle, n int) []*Puzzle {
 		}
 	}
 	return nil
+}
+
+func edgeSet(edges []Edge) map[string]bool {
+	out := make(map[string]bool, len(edges))
+	for _, e := range edges {
+		from := strings.TrimSpace(e.From)
+		to := strings.TrimSpace(e.To)
+		if from == "" || to == "" {
+			continue
+		}
+		out[from+"\x00"+to] = true
+	}
+	return out
+}
+
+// firstDigitInID matches the frontend shuffle seed (first digit in the id, else 0).
+func firstDigitInID(id string) int {
+	for _, r := range id {
+		if r >= '0' && r <= '9' {
+			return int(r - '0')
+		}
+	}
+	return 0
 }

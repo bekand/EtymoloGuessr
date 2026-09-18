@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
+import { joinClasses } from '@/utils/joinClasses'
 import './InkButton.scss'
 
 type InkButtonProps = {
@@ -12,7 +13,7 @@ export function InkButton({
   type = 'button',
   ...rest
 }: InkButtonProps) {
-  const classes = ['inkButton', className].filter(Boolean).join(' ')
+  const classes = joinClasses('inkButton', className)
 
   return (
     <button type={type} className={classes} {...rest}>

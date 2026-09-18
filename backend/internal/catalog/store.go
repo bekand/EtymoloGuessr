@@ -44,6 +44,54 @@ func (s *MemoryStore) Len() int {
 	return len(s.byID)
 }
 
+func (s *MemoryStore) RandomPuzzle(_ context.Context, filter puzzle.Filter) (*puzzle.Puzzle, error) {
+	matches := s.matching(filter)
+	if len(matches) == 0 {
+		return nil, puzzle.ErrNotFound
+	}
+	return matches[rand.IntN(len(matches))], nil
+}
+
+func (s *MemoryStore) RandomPuzzles(_ context.Context, filter puzzle.Filter, n int) ([]*puzzle.Puzzle, error) {
+	if n <= 0 {
+		return nil, puzzle.ErrNotFound
+	}
+	matches := s.matching(filter)
+	picked := puzzle.SelectDistinctLeaves(shuffleCopy(matches), n)
+	if len(picked) < n && len(filter.ExcludeIDs) > 0 {
+		// Exclusion left too few distinct-leaf puzzles; retry without exclude.
+		matches = s.matching(filter.WithoutExclusions())
+		picked = puzzle.SelectDistinctLeaves(shuffleCopy(matches), n)
+	}
+	if len(picked) < n {
+		return nil, puzzle.ErrNotFound
+	}
+	return picked, nil
+}
+
+func (s *MemoryStore) GetPuzzle(_ context.Context, id string) (*puzzle.Puzzle, error) {
+	p, ok := s.byID[id]
+	if !ok || !p.Enabled {
+		return nil, puzzle.ErrNotFound
+	}
+	return p, nil
+}
+
+func (s *MemoryStore) GetPuzzles(_ context.Context, ids []string) ([]*puzzle.Puzzle, error) {
+	puzzles := make([]*puzzle.Puzzle, 0, len(ids))
+	for _, id := range ids {
+		p, ok := s.byID[id]
+		if !ok || !p.Enabled {
+			return nil, puzzle.ErrNotFound
+		}
+		puzzles = append(puzzles, p)
+	}
+	if len(puzzles) == 0 {
+		return nil, puzzle.ErrNotFound
+	}
+	return puzzles, nil
+}
+
 func (s *MemoryStore) matching(filter puzzle.Filter) []*puzzle.Puzzle {
 	exclude := make(map[string]struct{}, len(filter.ExcludeIDs))
 	for _, id := range filter.ExcludeIDs {
@@ -71,58 +119,10 @@ func (s *MemoryStore) matching(filter puzzle.Filter) []*puzzle.Puzzle {
 	return matches
 }
 
-func (s *MemoryStore) RandomPuzzle(_ context.Context, filter puzzle.Filter) (*puzzle.Puzzle, error) {
-	matches := s.matching(filter)
-	if len(matches) == 0 {
-		return nil, puzzle.ErrNotFound
-	}
-	return matches[rand.IntN(len(matches))], nil
-}
-
-func (s *MemoryStore) RandomPuzzles(_ context.Context, filter puzzle.Filter, n int) ([]*puzzle.Puzzle, error) {
-	if n <= 0 {
-		return nil, puzzle.ErrNotFound
-	}
-	matches := s.matching(filter)
-	picked := puzzle.SelectDistinctLeaves(shuffleCopy(matches), n)
-	if len(picked) < n && len(filter.ExcludeIDs) > 0 {
-		// Exclusion left too few distinct-leaf puzzles; retry without exclude.
-		matches = s.matching(filter.WithoutExclusions())
-		picked = puzzle.SelectDistinctLeaves(shuffleCopy(matches), n)
-	}
-	if len(picked) < n {
-		return nil, puzzle.ErrNotFound
-	}
-	return picked, nil
-}
-
 func shuffleCopy(in []*puzzle.Puzzle) []*puzzle.Puzzle {
 	out := append([]*puzzle.Puzzle(nil), in...)
 	rand.Shuffle(len(out), func(i, j int) { out[i], out[j] = out[j], out[i] })
 	return out
-}
-
-func (s *MemoryStore) GetPuzzle(_ context.Context, id string) (*puzzle.Puzzle, error) {
-	p, ok := s.byID[id]
-	if !ok || !p.Enabled {
-		return nil, puzzle.ErrNotFound
-	}
-	return p, nil
-}
-
-func (s *MemoryStore) GetPuzzles(_ context.Context, ids []string) ([]*puzzle.Puzzle, error) {
-	puzzles := make([]*puzzle.Puzzle, 0, len(ids))
-	for _, id := range ids {
-		p, ok := s.byID[id]
-		if !ok || !p.Enabled {
-			return nil, puzzle.ErrNotFound
-		}
-		puzzles = append(puzzles, p)
-	}
-	if len(puzzles) == 0 {
-		return nil, puzzle.ErrNotFound
-	}
-	return puzzles, nil
 }
 
 func matchesFilter(p *puzzle.Puzzle, filter puzzle.Filter) bool {

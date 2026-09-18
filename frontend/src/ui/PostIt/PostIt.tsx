@@ -1,4 +1,5 @@
 import { useState, type ButtonHTMLAttributes, type CSSProperties, type ReactNode } from 'react'
+import { joinClasses } from '@/utils/joinClasses'
 import './PostIt.scss'
 
 export const POST_IT_MIN_TILT_DEG = 0.2
@@ -35,15 +36,13 @@ export function PostIt({
   ...rest
 }: PostItProps) {
   const [tilt] = useState(randomTiltDeg)
-  const classes = [
+  const classes = joinClasses(
     'postIt',
     tone,
     selected && 'selected',
     placeholder && 'placeholder',
     className,
-  ]
-    .filter(Boolean)
-    .join(' ')
+  )
   const tiltStyle = {
     ...style,
     '--post-it-tilt': `${tilt}deg`,

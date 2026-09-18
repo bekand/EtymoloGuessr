@@ -1,11 +1,12 @@
 import { useRef, useState } from 'react'
 import { solveHardPuzzle } from '@/api/puzzles'
 import type { GraphEdge } from '@/api/types'
-import { Colophon, PlayHeader, Sheet, Stamp } from '@/ui'
-import { joinClasses } from '@/utils/joinClasses'
+import { Stamp } from '@/ui'
 import { useSettlingClip } from '@/utils/useSettlingClip'
 import { FeedbackScreen } from '../feedback/FeedbackScreen'
 import { useSolvePuzzle } from '../hooks/useSolvePuzzle'
+import { ModeShell } from '../modes/ModeShell'
+import { getStampHint } from '../modes/stampHint'
 import { HardCanvas, type HardCanvasHandle } from './HardCanvas'
 import './HardMode.scss'
 
@@ -32,19 +33,19 @@ export function HardMode() {
   const graph = puzzle?.promptGraph
   const missingGraph = Boolean(puzzle && !graph)
 
-  const stampHint = loadError
-    ? (puzzleQuery.error instanceof Error
-      ? puzzleQuery.error.message
-      : 'Could not load a puzzle.')
-    : missingGraph
-      ? 'This puzzle has no graph to place.'
-      : solveMutation.isError
-        ? (solveMutation.error instanceof Error
-          ? solveMutation.error.message
-          : 'Could not submit that graph.')
-        : allPlaced
-          ? 'Submit when ready.'
-          : 'Build the graph!'
+  const stampHint = getStampHint(
+    {
+      loadError: loadError ? puzzleQuery.error ?? true : null,
+      submitError: solveMutation.isError ? solveMutation.error ?? true : null,
+      ready: allPlaced,
+    },
+    {
+      onError: 'Could not load a puzzle.',
+      onReady: missingGraph ? 'This puzzle has no graph to place.' : 'Build the graph!',
+      onSubmitError: 'Could not submit that graph.',
+      onSubmitReady: 'Submit when ready.',
+    },
+  )
 
   function handleNext() {
     setAllPlaced(false)
@@ -59,14 +60,7 @@ export function HardMode() {
     : 'Waiting for cards'
 
   return (
-    <Sheet
-      as="main"
-      tone="kraft"
-      className={joinClasses('hardMode', settling && 'settling')}
-      onAnimationEnd={onAnimationEnd}
-    >
-      <PlayHeader mode="hard" streak={streak} />
-
+    <ModeShell mode="hard" streak={streak} settling={settling} onAnimationEnd={onAnimationEnd}>
       {revealing ? null : (
         <>
           <p className="instruction">
@@ -135,7 +129,6 @@ export function HardMode() {
         </>
       )}
 
-      <Colophon />
-    </Sheet>
+    </ModeShell>
   )
 }

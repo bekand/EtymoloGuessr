@@ -165,7 +165,7 @@ defer pool.Close()
 defer res.Body.Close()  // in tests
 ```
 
-`defer` runs when the surrounding function returns, LIFO. Use it for Close/Release so you do not leak on every error return. In `Migrate`, `conn.Release()` is called explicitly on each path because the acquire lives inside a loop (a deferred Release in the loop would pile up until `Migrate` returns).
+`defer` runs when the surrounding function returns, LIFO. Use it for Close/Release so you do not leak on every error return. `Migrate` delegates one migration to a helper so `defer conn.Release()` runs when that migration finishes, rather than piling up deferred releases across the loop.
 
 ## Generics: we barely use them
 

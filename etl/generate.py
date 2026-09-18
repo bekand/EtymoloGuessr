@@ -332,6 +332,33 @@ def _rewrite_form_lca(
     return new_id, _swap(path_a), _swap(path_b), _swap(node_list)
 
 
+def _rebuild_candidate_paths(
+    g: nx.DiGraph,
+    glosses: dict[str, str],
+    path_a: list[str],
+    path_b: list[str],
+    *,
+    chosen: str,
+    leaf_ids: set[str],
+    prefer_latin: bool = False,
+) -> tuple[list[str], list[str], list[str], list[GraphEdge], str]:
+    """Rebuild and unify a candidate graph after its LCA or paths change."""
+    if prefer_latin:
+        path_a = prefer_latin_chain_path(g, path_a, chosen)
+        path_b = prefer_latin_chain_path(g, path_b, chosen)
+    node_list = subgraph_from_paths(path_a, path_b)
+    edges = _edges_from_paths(g, path_a, path_b)
+    node_list, edges, chosen = unify_same_gloss_ancestors(
+        node_list,
+        edges,
+        g=g,
+        glosses=glosses,
+        leaf_ids=leaf_ids,
+        lca_id=chosen,
+    )
+    return path_a, path_b, node_list, edges, chosen
+
+
 class Funnel:
     def __init__(self) -> None:
         self.counts: Counter[str] = Counter()
@@ -574,26 +601,22 @@ def extract_candidates(
             )
             lca_lang = g.nodes[chosen]["lang"]
             lca_term = g.nodes[chosen]["term"]
-            edges = _edges_from_paths(g, path_a, path_b)
-            node_list, edges, chosen = unify_same_gloss_ancestors(
-                node_list,
-                edges,
-                g=g,
-                glosses=glosses,
+            path_a, path_b, node_list, edges, chosen = _rebuild_candidate_paths(
+                g,
+                glosses,
+                path_a,
+                path_b,
+                chosen=chosen,
                 leaf_ids=leaf_ids,
-                lca_id=chosen,
             )
-        path_a = prefer_latin_chain_path(g, path_a, chosen)
-        path_b = prefer_latin_chain_path(g, path_b, chosen)
-        node_list = subgraph_from_paths(path_a, path_b)
-        edges = _edges_from_paths(g, path_a, path_b)
-        node_list, edges, chosen = unify_same_gloss_ancestors(
-            node_list,
-            edges,
-            g=g,
-            glosses=glosses,
+        path_a, path_b, node_list, edges, chosen = _rebuild_candidate_paths(
+            g,
+            glosses,
+            path_a,
+            path_b,
+            chosen=chosen,
             leaf_ids=leaf_ids,
-            lca_id=chosen,
+            prefer_latin=True,
         )
         if len(node_list) > max_nodes:
             funnel.bump("too_big")
@@ -657,7 +680,7 @@ def extract_candidates(
         }
         candidates.append(cand)
         funnel.bump("candidates")
-        if score >= min_quality and need_each is not None:
+        if score >= min_quality and need_each is not None and hard_cap is not None:
             if involves_english(cand):
                 good_en += 1
             else:
@@ -871,26 +894,24 @@ def generate_puzzles(
         return True
 
     for en_bucket, other_bucket in prepare_score_buckets(candidates, rng):
-        en_i = other_i = 0
-        emitted_en = emitted_other = 0
-        while en_i < len(en_bucket) or other_i < len(other_bucket):
+        buckets = (en_bucket, other_bucket)
+        indexes = [0, 0]
+        emitted = [0, 0]
+        while any(index < len(bucket) for bucket, index in zip(buckets, indexes)):
             if n and n > 0 and len(puzzles) >= n:
                 break
-            prefer_en = emitted_en <= emitted_other
-            if prefer_en and en_i < len(en_bucket):
-                if _try_emit(en_bucket[en_i]):
-                    emitted_en += 1
-                en_i += 1
-            elif other_i < len(other_bucket):
-                if _try_emit(other_bucket[other_i]):
-                    emitted_other += 1
-                other_i += 1
-            elif en_i < len(en_bucket):
-                if _try_emit(en_bucket[en_i]):
-                    emitted_en += 1
-                en_i += 1
-            else:
+            preferred = 0 if emitted[0] <= emitted[1] else 1
+            order = (preferred, 1 - preferred)
+            bucket_index = next(
+                (index for index in order if indexes[index] < len(buckets[index])),
+                None,
+            )
+            if bucket_index is None:
                 break
+            candidate = buckets[bucket_index][indexes[bucket_index]]
+            indexes[bucket_index] += 1
+            if _try_emit(candidate):
+                emitted[bucket_index] += 1
         if n and n > 0 and len(puzzles) >= n:
             break
 

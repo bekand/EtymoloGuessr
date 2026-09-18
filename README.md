@@ -2,7 +2,7 @@
 
 A guessing game about etymology. You are shown two modern words (English, Spanish, Portuguese, or German) that share an ancestor, and you try to recover that connection.
 
-**Easy** asks you to pick the shared ancestor’s meaning from four choices, then shows the etymology graph. **Hard** gives you the words and asks you to place the ancestors and draw the edges yourself.
+**Easy** asks you to pick the shared ancestor’s meaning from four choices. **Medium** asks you to pair eight words by their shared ancestors. **Hard** gives you the words and asks you to place the ancestors and draw the edges yourself. Every mode reveals feedback about the shared ancestry after submission.
 
 Puzzles are built offline from Wiktionary-derived etymology data. The live game never walks that graph: Python ETL writes puzzle rows, a Go API serves one at a time (hiding the answer until you submit), and a React UI plays the round.
 
@@ -13,7 +13,7 @@ Puzzle data is derived from [etymology-db](https://github.com/droher/etymology-d
 ```
 etl/            Python CLI: download dumps, filter the graph, emit puzzles
 backend/        Go HTTP API (Postgres locally; JSONL catalog in production)
-frontend/       React + Vite UI (home, easy, hard)
+frontend/       React + Vite UI (home, easy, medium, hard)
 data/           Local artifacts (raw dumps, derived graph, puzzle JSONL) — not in git
 etl/tests/      ETL pytest (offline + optional Postgres)
 docker-compose.yml        Postgres 16 + API (play stack, :5432 / :8080)
@@ -119,6 +119,6 @@ Two services, **no Railway Postgres**. ETL stays on your machine. Catalog update
 
 3. Deploy **api** first, copy its `*.up.railway.app` URL into the web service `VITE_API_URL`, then deploy **web**. Put the web URL on the api service `CORS_ORIGINS` and redeploy api if you guessed the web URL wrong.
 
-`GET https://<api>/health` is process-up (no Postgres). `/easy` and `/hard` are SPA routes (Caddy `try_files`). Custom domains need Railway Hobby; free plan is `*.up.railway.app` only.
+`GET https://<api>/health` is process-up (no Postgres). `/easy`, `/medium`, and `/hard` are SPA routes (Caddy `try_files`). Custom domains need Railway Hobby; free plan is `*.up.railway.app` only.
 
 Do not run `etl` on Railway. Do not add a database plugin for v1.

@@ -1,5 +1,6 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
 import { useId } from 'react'
+import { joinClasses } from '@/utils/joinClasses'
 import './Stamp.scss'
 
 export type StampTone = 'black' | 'red' | 'green' | 'blue'
@@ -22,7 +23,7 @@ export function Stamp({
   ...rest
 }: StampProps) {
   const hintId = useId()
-  const classes = ['stamp', size, tone, className].filter(Boolean).join(' ')
+  const classes = joinClasses('stamp', size, tone, className)
 
   const button = (
     <button

@@ -19,6 +19,49 @@ type Server struct {
 	mux    http.Handler
 }
 
+type solveRequest struct {
+	Mode     string        `json:"mode"`
+	ChoiceID string        `json:"choiceId"`
+	Edges    []puzzle.Edge `json:"edges"`
+	Pairs    [][]string    `json:"pairs"`
+}
+
+type solveResponse struct {
+	Correct       bool            `json:"correct"`
+	GoldGraph     *puzzle.Graph   `json:"goldGraph,omitempty"`
+	Choices       []puzzle.Choice `json:"choices,omitempty"`
+	CorrectChoice string          `json:"correctChoice,omitempty"`
+	Ancestors     []puzzle.Term   `json:"ancestors,omitempty"`
+	PairOrigins   []pairOrigin    `json:"pairOrigins,omitempty"`
+}
+
+type pairOrigin struct {
+	Pair     [2]puzzle.Term `json:"pair"`
+	Ancestor puzzle.Term    `json:"ancestor"`
+}
+
+type promptResponse struct {
+	ID          string          `json:"id"`
+	Mode        puzzle.Mode     `json:"mode"`
+	LangPair    string          `json:"langPair"`
+	LeafA       json.RawMessage `json:"leafA"`
+	LeafB       json.RawMessage `json:"leafB"`
+	Choices     []puzzle.Choice `json:"choices"`
+	PromptGraph *puzzle.Graph   `json:"promptGraph,omitempty"`
+}
+
+type mediumLeaf struct {
+	ID   string `json:"id"`
+	Lang string `json:"lang"`
+	Term string `json:"term"`
+}
+
+type mediumPromptResponse struct {
+	ID     string       `json:"id"`
+	Mode   puzzle.Mode  `json:"mode"`
+	Leaves []mediumLeaf `json:"leaves"`
+}
+
 func New(store puzzle.Store, cfg config.Config, logger *slog.Logger) *Server {
 	if logger == nil {
 		logger = slog.Default()
@@ -82,13 +125,7 @@ func (s *Server) handleRandom(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "failed to load puzzle")
 			return
 		}
-		payload, buildErr := mediumPromptPayload(puzzles)
-		if buildErr != nil {
-			s.logger.Error("medium prompt", "err", buildErr)
-			writeError(w, http.StatusInternalServerError, "failed to load puzzle")
-			return
-		}
-		writeJSON(w, http.StatusOK, payload)
+		s.writeMediumPrompt(w, puzzles)
 		return
 	}
 
@@ -109,26 +146,6 @@ func (s *Server) handleRandom(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, promptPayload(p, mode))
 }
 
-// parseExcludeIDs accepts repeated exclude= query values and comma-separated lists.
-func parseExcludeIDs(values []string) []string {
-	var out []string
-	seen := make(map[string]struct{})
-	for _, raw := range values {
-		for _, part := range strings.Split(raw, ",") {
-			id := strings.TrimSpace(part)
-			if id == "" {
-				continue
-			}
-			if _, ok := seen[id]; ok {
-				continue
-			}
-			seen[id] = struct{}{}
-			out = append(out, id)
-		}
-	}
-	return out
-}
-
 func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
@@ -146,13 +163,7 @@ func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {
 		if loadErr != nil {
 			return
 		}
-		payload, buildErr := mediumPromptPayload(puzzles)
-		if buildErr != nil {
-			s.logger.Error("medium prompt", "err", buildErr)
-			writeError(w, http.StatusInternalServerError, "failed to load puzzle")
-			return
-		}
-		writeJSON(w, http.StatusOK, payload)
+		s.writeMediumPrompt(w, puzzles)
 		return
 	}
 
@@ -171,27 +182,6 @@ func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, promptPayload(p, mode))
-}
-
-type solveRequest struct {
-	Mode     string        `json:"mode"`
-	ChoiceID string        `json:"choiceId"`
-	Edges    []puzzle.Edge `json:"edges"`
-	Pairs    [][]string    `json:"pairs"`
-}
-
-type solveResponse struct {
-	Correct       bool            `json:"correct"`
-	GoldGraph     *puzzle.Graph   `json:"goldGraph,omitempty"`
-	Choices       []puzzle.Choice `json:"choices,omitempty"`
-	CorrectChoice string          `json:"correctChoice,omitempty"`
-	Ancestors     []puzzle.Term   `json:"ancestors,omitempty"`
-	PairOrigins   []pairOrigin    `json:"pairOrigins,omitempty"`
-}
-
-type pairOrigin struct {
-	Pair     [2]puzzle.Term `json:"pair"`
-	Ancestor puzzle.Term    `json:"ancestor"`
 }
 
 func (s *Server) handleSolve(w http.ResponseWriter, r *http.Request) {
@@ -270,13 +260,7 @@ func (s *Server) solveMedium(w http.ResponseWriter, r *http.Request, id string, 
 	ancestors := make([]puzzle.Term, 0, puzzle.MediumSetSize)
 	pairOrigins := make([]pairOrigin, 0, puzzle.MediumSetSize)
 	for _, p := range puzzles {
-		leafA, decodeErr := puzzle.DecodeTerm(p.LeafA)
-		if decodeErr != nil {
-			s.logger.Error("medium leaf missing", "id", p.ID, "err", decodeErr)
-			writeError(w, http.StatusInternalServerError, "failed to grade puzzle")
-			return
-		}
-		leafB, decodeErr := puzzle.DecodeTerm(p.LeafB)
+		leaves, decodeErr := decodeLeafPair(p)
 		if decodeErr != nil {
 			s.logger.Error("medium leaf missing", "id", p.ID, "err", decodeErr)
 			writeError(w, http.StatusInternalServerError, "failed to grade puzzle")
@@ -293,7 +277,7 @@ func (s *Server) solveMedium(w http.ResponseWriter, r *http.Request, id string, 
 			return
 		}
 		ancestors = append(ancestors, anc)
-		pairOrigins = append(pairOrigins, pairOrigin{Pair: [2]puzzle.Term{leafA, leafB}, Ancestor: anc})
+		pairOrigins = append(pairOrigins, pairOrigin{Pair: leaves, Ancestor: anc})
 	}
 
 	writeJSON(w, http.StatusOK, solveResponse{
@@ -322,26 +306,26 @@ func (s *Server) loadMediumSet(w http.ResponseWriter, r *http.Request, id string
 	return puzzles, nil
 }
 
-type promptResponse struct {
-	ID          string          `json:"id"`
-	Mode        puzzle.Mode     `json:"mode"`
-	LangPair    string          `json:"langPair"`
-	LeafA       json.RawMessage `json:"leafA"`
-	LeafB       json.RawMessage `json:"leafB"`
-	Choices     []puzzle.Choice `json:"choices"`
-	PromptGraph *puzzle.Graph   `json:"promptGraph,omitempty"`
+func (s *Server) writeMediumPrompt(w http.ResponseWriter, puzzles []*puzzle.Puzzle) {
+	payload, err := mediumPromptPayload(puzzles)
+	if err != nil {
+		s.logger.Error("medium prompt", "err", err)
+		writeError(w, http.StatusInternalServerError, "failed to load puzzle")
+		return
+	}
+	writeJSON(w, http.StatusOK, payload)
 }
 
-type mediumLeaf struct {
-	ID   string `json:"id"`
-	Lang string `json:"lang"`
-	Term string `json:"term"`
-}
-
-type mediumPromptResponse struct {
-	ID     string       `json:"id"`
-	Mode   puzzle.Mode  `json:"mode"`
-	Leaves []mediumLeaf `json:"leaves"`
+func decodeLeafPair(p *puzzle.Puzzle) ([2]puzzle.Term, error) {
+	leafA, err := puzzle.DecodeTerm(p.LeafA)
+	if err != nil {
+		return [2]puzzle.Term{}, err
+	}
+	leafB, err := puzzle.DecodeTerm(p.LeafB)
+	if err != nil {
+		return [2]puzzle.Term{}, err
+	}
+	return [2]puzzle.Term{leafA, leafB}, nil
 }
 
 func promptPayload(p *puzzle.Puzzle, mode puzzle.Mode) promptResponse {
@@ -364,17 +348,13 @@ func mediumPromptPayload(puzzles []*puzzle.Puzzle) (mediumPromptResponse, error)
 	leaves := make([]mediumLeaf, 0, puzzle.MediumSetSize*2)
 	for i, p := range puzzles {
 		ids[i] = p.ID
-		a, err := puzzle.DecodeTerm(p.LeafA)
-		if err != nil {
-			return mediumPromptResponse{}, err
-		}
-		b, err := puzzle.DecodeTerm(p.LeafB)
+		pair, err := decodeLeafPair(p)
 		if err != nil {
 			return mediumPromptResponse{}, err
 		}
 		leaves = append(leaves,
-			mediumLeaf{ID: puzzle.LeafToken(p.ID, "a"), Lang: a.Lang, Term: a.Term},
-			mediumLeaf{ID: puzzle.LeafToken(p.ID, "b"), Lang: b.Lang, Term: b.Term},
+			mediumLeaf{ID: puzzle.LeafToken(p.ID, "a"), Lang: pair[0].Lang, Term: pair[0].Term},
+			mediumLeaf{ID: puzzle.LeafToken(p.ID, "b"), Lang: pair[1].Lang, Term: pair[1].Term},
 		)
 	}
 	setID := puzzle.MediumSetID(ids)
@@ -423,4 +403,24 @@ func withCORS(origins []string, next http.Handler) http.Handler {
 func contains(set map[string]struct{}, key string) bool {
 	_, ok := set[key]
 	return ok
+}
+
+// parseExcludeIDs accepts repeated exclude= query values and comma-separated lists.
+func parseExcludeIDs(values []string) []string {
+	var out []string
+	seen := make(map[string]struct{})
+	for _, raw := range values {
+		for _, part := range strings.Split(raw, ",") {
+			id := strings.TrimSpace(part)
+			if id == "" {
+				continue
+			}
+			if _, ok := seen[id]; ok {
+				continue
+			}
+			seen[id] = struct{}{}
+			out = append(out, id)
+		}
+	}
+	return out
 }

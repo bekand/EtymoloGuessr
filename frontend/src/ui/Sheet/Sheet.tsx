@@ -1,4 +1,5 @@
 import type { AnimationEventHandler, CSSProperties, ReactNode } from 'react'
+import { joinClasses } from '@/utils/joinClasses'
 import './Sheet.scss'
 
 type SheetTone = 'paper' | 'kraft'
@@ -20,7 +21,7 @@ export function Sheet({
   as: Tag = 'div',
   onAnimationEnd,
 }: SheetProps) {
-  const classes = ['sheet', tone, className].filter(Boolean).join(' ')
+  const classes = joinClasses('sheet', tone, className)
 
   return (
     <Tag className={classes} style={style} onAnimationEnd={onAnimationEnd}>

@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { solveEasyPuzzle } from '@/api/puzzles'
-import { Colophon, IndexCard, PlayHeader, PostIt, Sheet, Stamp } from '@/ui'
-import { joinClasses } from '@/utils/joinClasses'
+import { IndexCard, PostIt, Stamp } from '@/ui'
 import { shuffle } from '@/utils/shuffle'
 import { useSettlingClip } from '@/utils/useSettlingClip'
 import { FeedbackScreen } from '../feedback/FeedbackScreen'
 import { useSolvePuzzle } from '../hooks/useSolvePuzzle'
+import { ModeShell } from '../modes/ModeShell'
+import { getStampHint } from '../modes/stampHint'
 import './EasyMode.scss'
 
 const CHOICE_TONES = ['yellow', 'pink', 'blue', 'green'] as const
@@ -35,17 +36,19 @@ export function EasyMode() {
   const choiceTones = shuffle(CHOICE_TONES, shuffleSeed)
   const choices = shuffle(puzzle?.choices ?? [null, null, null, null], shuffleSeed)
 
-  const stampHint = loadError
-    ? (puzzleQuery.error instanceof Error
-      ? puzzleQuery.error.message
-      : 'Could not load a puzzle.')
-    : solveMutation.isError
-      ? (solveMutation.error instanceof Error
-        ? solveMutation.error.message
-        : 'Could not submit that answer.')
-      : selectedId
-        ? 'Submit when you are sure.'
-        : 'Pick an answer!'
+  const stampHint = getStampHint(
+    {
+      loadError: loadError ? puzzleQuery.error ?? true : null,
+      submitError: solveMutation.isError ? solveMutation.error ?? true : null,
+      ready: Boolean(selectedId),
+    },
+    {
+      onError: 'Could not load a puzzle.',
+      onReady: 'Pick an answer!',
+      onSubmitError: 'Could not submit that answer.',
+      onSubmitReady: 'Submit when you are sure.',
+    },
+  )
 
   const progressText = selectedId ? 'Choice selected' : 'Choose one'
 
@@ -157,14 +160,7 @@ export function EasyMode() {
   }
 
   return (
-    <Sheet
-      as="main"
-      tone="kraft"
-      className={joinClasses('easyMode', settling && 'settling')}
-      onAnimationEnd={onAnimationEnd}
-    >
-      <PlayHeader mode="easy" streak={streak} />
-
+    <ModeShell mode="easy" streak={streak} settling={settling} onAnimationEnd={onAnimationEnd}>
       {revealing ? null : renderPrompt()}
 
       {revealing ? (
@@ -182,7 +178,6 @@ export function EasyMode() {
         </div>
       )}
 
-      <Colophon />
-    </Sheet>
+    </ModeShell>
   )
 }

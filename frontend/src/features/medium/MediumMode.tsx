@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
 import { solveMediumPuzzle } from '@/api/puzzles'
 import type { MediumLeaf } from '@/api/types'
-import { Colophon, PlayHeader, PostIt, Sheet, Stamp } from '@/ui'
-import { joinClasses } from '@/utils/joinClasses'
+import { PostIt, Stamp } from '@/ui'
 import { useSettlingClip } from '@/utils/useSettlingClip'
 import { FeedbackScreen } from '../feedback/FeedbackScreen'
 import { useSolvePuzzle } from '../hooks/useSolvePuzzle'
+import { ModeShell } from '../modes/ModeShell'
+import { getStampHint } from '../modes/stampHint'
 import './MediumMode.scss'
 
 const PAIR_SLOTS = [
@@ -96,17 +97,19 @@ export function MediumMode() {
     }))
   }, [puzzle?.leaves])
 
-  const stampHint = loadError
-    ? puzzleQuery.error instanceof Error
-      ? puzzleQuery.error.message
-      : 'Could not load a puzzle.'
-    : solveMutation.isError
-      ? solveMutation.error instanceof Error
-        ? solveMutation.error.message
-        : 'Could not submit that answer.'
-      : pairs.length === 4
-        ? 'Submit when you are sure.'
-        : 'Pair all eight words.'
+  const stampHint = getStampHint(
+    {
+      loadError: loadError ? puzzleQuery.error ?? true : null,
+      submitError: solveMutation.isError ? solveMutation.error ?? true : null,
+      ready: pairs.length === 4,
+    },
+    {
+      onError: 'Could not load a puzzle.',
+      onReady: 'Pair all eight words.',
+      onSubmitError: 'Could not submit that answer.',
+      onSubmitReady: 'Submit when you are sure.',
+    },
+  )
 
   const progressText = `${pairs.length}/4 pairs matched`
 
@@ -242,14 +245,7 @@ export function MediumMode() {
   }
 
   return (
-    <Sheet
-      as="main"
-      tone="kraft"
-      className={joinClasses('mediumMode', settling && 'settling')}
-      onAnimationEnd={onAnimationEnd}
-    >
-      <PlayHeader mode="medium" streak={streak} />
-
+    <ModeShell mode="medium" streak={streak} settling={settling} onAnimationEnd={onAnimationEnd}>
       {revealing ? (
         <FeedbackScreen
           mode="medium"
@@ -271,7 +267,6 @@ export function MediumMode() {
         </>
       )}
 
-      <Colophon />
-    </Sheet>
+    </ModeShell>
   )
 }

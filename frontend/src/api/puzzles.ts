@@ -145,30 +145,6 @@ export function clearPuzzleLock(mode: PuzzleMode): void {
   localStorage.removeItem(LOCK_KEYS[mode])
 }
 
-export function readEasyPuzzleLock(): PuzzlePrompt | null {
-  return readPuzzleLock('easy')
-}
-
-export function writeEasyPuzzleLock(puzzle: PuzzlePrompt): void {
-  writePuzzleLock('easy', puzzle)
-}
-
-export function clearEasyPuzzleLock(): void {
-  clearPuzzleLock('easy')
-}
-
-export function readHardPuzzleLock(): PuzzlePrompt | null {
-  return readPuzzleLock('hard')
-}
-
-export function writeHardPuzzleLock(puzzle: PuzzlePrompt): void {
-  writePuzzleLock('hard', puzzle)
-}
-
-export function clearHardPuzzleLock(): void {
-  clearPuzzleLock('hard')
-}
-
 export function fetchRandomPuzzle(mode: 'easy' | 'hard'): Promise<PuzzlePrompt>
 export function fetchRandomPuzzle(mode: 'medium'): Promise<MediumPrompt>
 export function fetchRandomPuzzle<M extends PuzzleMode>(mode: M): Promise<PromptByMode[M]>

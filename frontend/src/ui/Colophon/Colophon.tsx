@@ -1,3 +1,4 @@
+import { joinClasses } from '@/utils/joinClasses'
 import './Colophon.scss'
 
 type ColophonProps = {
@@ -5,7 +6,7 @@ type ColophonProps = {
 }
 
 export function Colophon({ className }: ColophonProps) {
-  const classes = ['colophon', className].filter(Boolean).join(' ')
+  const classes = joinClasses('colophon', className)
 
   return (
     <footer className={classes}>
@@ -37,7 +38,7 @@ export function Colophon({ className }: ColophonProps) {
         >
           CC BY-SA 3.0
         </a>
-        . Material has been modified for puzzle generation.
+        . Material has been modified for puzzle generation. It may contain errors, ommissions, and/or simplifications.
       </p>
     </footer>
   )

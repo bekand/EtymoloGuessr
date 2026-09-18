@@ -39,7 +39,7 @@ The CLI never creates the `puzzles` table. The Go API applies migrations on star
 
 Expected columns: `id`, `enabled`, `leaf_a`, `leaf_b`, `answer_graph`, `choices`, `correct_choice`, `quality_score`, `lang_pair`, `source`. Upserts key on `id`.
 
-Canonical gold is **`answer_graph` only**. The player prompt is derived as `{nodes: answer_graph.nodes, edges: []}` (`etl.models.prompt_graph_from_answer` / `Puzzle.prompt_graph`). JSONL and Postgres store only `answer_graph` — no `prompt_graph` field or column. The API derives the prompt at serve time (hard mode keeps node glosses and drops edges). Answer-graph nodes include a gloss whenever the index has one (leaves, LCA, and intermediates).
+Canonical gold is **`answer_graph` only**. The player prompt is derived as `{nodes: answer_graph.nodes, edges: []}` (`etl.models.prompt_graph_from_answer` / `Puzzle.prompt_graph`). JSONL and Postgres store only `answer_graph` — no `prompt_graph` field or column. The API derives mode-specific prompts at serve time: Hard keeps node glosses and drops edges; Medium exposes opaque leaf tokens for a four-puzzle set. Answer-graph nodes include a gloss whenever the index has one (leaves, LCA, and intermediates).
 
 | Surface | Behavior |
 |---|---|
@@ -47,7 +47,7 @@ Canonical gold is **`answer_graph` only**. The player prompt is derived as `{nod
 | Load / `from_dict()` | Requires `answer_graph`; rejects payloads that still include `prompt_graph` |
 | Postgres upsert | Writes `answer_graph` only |
 | Validate | Checks `answer_graph` structure |
-| Go API | `GET /puzzles/random` builds prompt from gold; never send edges / `correct_choice` until `POST /puzzles/{id}/solve` |
+| Go API | `GET /puzzles/random` builds prompts from gold; never sends edges / `correct_choice` until `POST /puzzles/{id}/solve` |
 
 ## Data sources and license
 

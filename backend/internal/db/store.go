@@ -41,80 +41,12 @@ func (s *Store) RandomPuzzle(ctx context.Context, filter puzzle.Filter) (*puzzle
 	return p, err
 }
 
-func (s *Store) randomPuzzle(ctx context.Context, filter puzzle.Filter) (*puzzle.Puzzle, error) {
-	q := "SELECT " + puzzleColumns + " FROM puzzles" + puzzleFilters + " ORDER BY random() LIMIT 1"
-	var langPair *string
-	if filter.LangPair != "" {
-		langPair = &filter.LangPair
-	}
-	exclude := normalizeExclude(filter.ExcludeIDs)
-	return s.scanOne(ctx, q, langPair, filter.MinQuality, filter.MinNodes, exclude)
-}
-
 func (s *Store) RandomPuzzles(ctx context.Context, filter puzzle.Filter, n int) ([]*puzzle.Puzzle, error) {
 	picked, err := s.randomPuzzles(ctx, filter, n)
 	if (errors.Is(err, puzzle.ErrNotFound) || len(picked) < n) && len(filter.ExcludeIDs) > 0 {
 		return s.randomPuzzles(ctx, filter.WithoutExclusions(), n)
 	}
 	return picked, err
-}
-
-func (s *Store) randomPuzzles(ctx context.Context, filter puzzle.Filter, n int) ([]*puzzle.Puzzle, error) {
-	if n <= 0 {
-		return nil, puzzle.ErrNotFound
-	}
-	limit := n * 20
-	if limit < 40 {
-		limit = 40
-	}
-	q := "SELECT " + puzzleColumns + " FROM puzzles" + puzzleFilters + " ORDER BY random() LIMIT $5"
-	var langPair *string
-	if filter.LangPair != "" {
-		langPair = &filter.LangPair
-	}
-	exclude := normalizeExclude(filter.ExcludeIDs)
-	rows, err := s.pool.Query(ctx, q, langPair, filter.MinQuality, filter.MinNodes, exclude, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var candidates []*puzzle.Puzzle
-	for rows.Next() {
-		p, scanErr := scanPuzzle(rows)
-		if scanErr != nil {
-			return nil, scanErr
-		}
-		candidates = append(candidates, p)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	picked := puzzle.SelectDistinctLeaves(candidates, n)
-	if len(picked) < n {
-		return nil, puzzle.ErrNotFound
-	}
-	return picked, nil
-}
-
-func normalizeExclude(ids []string) []string {
-	out := make([]string, 0, len(ids))
-	seen := make(map[string]struct{}, len(ids))
-	for _, id := range ids {
-		id = strings.TrimSpace(id)
-		if id == "" {
-			continue
-		}
-		if _, ok := seen[id]; ok {
-			continue
-		}
-		seen[id] = struct{}{}
-		out = append(out, id)
-	}
-	if out == nil {
-		return []string{}
-	}
-	return out
 }
 
 func (s *Store) GetPuzzle(ctx context.Context, id string) (*puzzle.Puzzle, error) {
@@ -152,6 +84,74 @@ func (s *Store) GetPuzzles(ctx context.Context, ids []string) ([]*puzzle.Puzzle,
 		puzzles = append(puzzles, p)
 	}
 	return puzzles, nil
+}
+
+func (s *Store) randomPuzzle(ctx context.Context, filter puzzle.Filter) (*puzzle.Puzzle, error) {
+	q := "SELECT " + puzzleColumns + " FROM puzzles" + puzzleFilters + " ORDER BY random() LIMIT 1"
+	langPair, exclude := filterQueryArgs(filter)
+	return s.scanOne(ctx, q, langPair, filter.MinQuality, filter.MinNodes, exclude)
+}
+
+func (s *Store) randomPuzzles(ctx context.Context, filter puzzle.Filter, n int) ([]*puzzle.Puzzle, error) {
+	if n <= 0 {
+		return nil, puzzle.ErrNotFound
+	}
+	limit := n * 20
+	if limit < 40 {
+		limit = 40
+	}
+	q := "SELECT " + puzzleColumns + " FROM puzzles" + puzzleFilters + " ORDER BY random() LIMIT $5"
+	langPair, exclude := filterQueryArgs(filter)
+	rows, err := s.pool.Query(ctx, q, langPair, filter.MinQuality, filter.MinNodes, exclude, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var candidates []*puzzle.Puzzle
+	for rows.Next() {
+		p, scanErr := scanPuzzle(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		candidates = append(candidates, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	picked := puzzle.SelectDistinctLeaves(candidates, n)
+	if len(picked) < n {
+		return nil, puzzle.ErrNotFound
+	}
+	return picked, nil
+}
+
+func filterQueryArgs(filter puzzle.Filter) (*string, []string) {
+	var langPair *string
+	if filter.LangPair != "" {
+		langPair = &filter.LangPair
+	}
+	return langPair, normalizeExclude(filter.ExcludeIDs)
+}
+
+func normalizeExclude(ids []string) []string {
+	out := make([]string, 0, len(ids))
+	seen := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	if out == nil {
+		return []string{}
+	}
+	return out
 }
 
 type rowScanner interface {

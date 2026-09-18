@@ -50,7 +50,7 @@ Query:
 
 | Param | Default | Notes |
 |---|---|---|
-| `mode` | `easy` | `easy` or `hard` |
+| `mode` | `easy` | `easy`, `medium`, or `hard` |
 | `langPair` | (any) | e.g. `de-en` |
 | `minQuality` | (any) | integer vs `quality_score` |
 
@@ -61,6 +61,7 @@ Only `enabled = true` rows. `404` if none match.
 | Mode | `promptGraph` |
 |---|---|
 | `easy` | Omitted. The two words are `leafA` / `leafB`; the graph is only in the solve response (`goldGraph`) |
+| `medium` | Omitted. Eight opaque leaf tokens are returned in `leaves`; the four-puzzle set id is returned as `id` |
 | `hard` | All nodes with glosses kept; `edges: []`. Terms stay so the player can place known ancestor cards |
 
 `choices` are always sent (unmarked). Hard UI can ignore them.
@@ -71,9 +72,9 @@ Query:
 
 | Param | Default | Notes |
 |---|---|---|
-| `mode` | `easy` | `easy` or `hard` |
+| `mode` | `easy` | `easy`, `medium`, or `hard` |
 
-Same prompt as random for that id: Easy omits `promptGraph`; Hard sends all nodes with glosses kept, empty edges. Never `correctChoice` or gold edges.
+Same prompt as random for that id: Easy omits `promptGraph`; Medium returns the eight leaves in the requested puzzle set; Hard sends all nodes with glosses kept, empty edges. Never `correctChoice` or gold edges.
 
 The UI lock re-fetches this after refresh. `404` if the puzzle is missing, disabled, or not eligible for the mode (Hard needs ≥ 4 nodes) — that clears a lock when `generate --db` replaced the table. Invalid `mode` → `400`.
 
@@ -100,6 +101,17 @@ Hard (directed edge set; order and `reltype` ignored):
 ```
 
 Response includes `correct`, `goldGraph`, `choices`, `correctChoice`.
+
+Medium:
+
+```json
+{
+  "mode": "medium",
+  "pairs": [["leaf-token-a", "leaf-token-b"], ["leaf-token-c", "leaf-token-d"], ["leaf-token-e", "leaf-token-f"], ["leaf-token-g", "leaf-token-h"]]
+}
+```
+
+The response includes `correct`, `ancestors`, and `pairOrigins`; it does not reveal the gold graph.
 
 CORS: `GET`, `POST`, `OPTIONS` from origins in `CORS_ORIGINS` (Vite defaults).
 
