@@ -22,6 +22,12 @@ const LOCK_KEYS: Record<PuzzleMode, string> = {
 const RECENT_IDS_KEY = 'etymologuessr:recent-puzzle-ids'
 const RECENT_IDS_MAX = 10
 
+type PromptByMode = {
+  easy: PuzzlePrompt
+  hard: PuzzlePrompt
+  medium: MediumPrompt
+}
+
 export function isPuzzleNotFound(error: unknown): boolean {
   return error instanceof ApiError && error.status === 404
 }
@@ -108,6 +114,7 @@ function isValidLock(mode: PuzzleMode, parsed: PuzzlePrompt | MediumPrompt): boo
 
 export function readPuzzleLock(mode: 'easy' | 'hard'): PuzzlePrompt | null
 export function readPuzzleLock(mode: 'medium'): MediumPrompt | null
+export function readPuzzleLock<M extends PuzzleMode>(mode: M): PromptByMode[M] | null
 export function readPuzzleLock(mode: PuzzleMode): PuzzlePrompt | MediumPrompt | null {
   const key = LOCK_KEYS[mode]
   try {
@@ -129,6 +136,7 @@ export function readPuzzleLock(mode: PuzzleMode): PuzzlePrompt | MediumPrompt | 
 
 export function writePuzzleLock(mode: 'easy' | 'hard', puzzle: PuzzlePrompt): void
 export function writePuzzleLock(mode: 'medium', puzzle: MediumPrompt): void
+export function writePuzzleLock<M extends PuzzleMode>(mode: M, puzzle: PromptByMode[M]): void
 export function writePuzzleLock(mode: PuzzleMode, puzzle: PuzzlePrompt | MediumPrompt): void {
   localStorage.setItem(LOCK_KEYS[mode], JSON.stringify(puzzle))
 }
@@ -163,21 +171,23 @@ export function clearHardPuzzleLock(): void {
 
 export function fetchRandomPuzzle(mode: 'easy' | 'hard'): Promise<PuzzlePrompt>
 export function fetchRandomPuzzle(mode: 'medium'): Promise<MediumPrompt>
+export function fetchRandomPuzzle<M extends PuzzleMode>(mode: M): Promise<PromptByMode[M]>
 export function fetchRandomPuzzle(mode: PuzzleMode): Promise<PuzzlePrompt | MediumPrompt> {
   return apiJson(randomPuzzleUrl(mode))
 }
 
 export function fetchPuzzleById(id: string, mode: 'easy' | 'hard'): Promise<PuzzlePrompt>
 export function fetchPuzzleById(id: string, mode: 'medium'): Promise<MediumPrompt>
+export function fetchPuzzleById<M extends PuzzleMode>(id: string, mode: M): Promise<PromptByMode[M]>
 export function fetchPuzzleById(id: string, mode: PuzzleMode): Promise<PuzzlePrompt | MediumPrompt> {
   return apiJson(`/puzzles/${encodeURIComponent(id)}?mode=${mode}`)
 }
 
-async function fetchLockedRandomEasyHard(mode: 'easy' | 'hard'): Promise<PuzzlePrompt> {
+async function fetchLockedRandom<M extends PuzzleMode>(mode: M): Promise<PromptByMode[M]> {
   const locked = readPuzzleLock(mode)
   if (locked) {
     try {
-      const live = await fetchPuzzleById(locked.id, mode)
+      const live = await fetchPuzzleById(locked.id, mode) as PromptByMode[M]
       writePuzzleLock(mode, live)
       return live
     } catch (error) {
@@ -190,39 +200,19 @@ async function fetchLockedRandomEasyHard(mode: 'easy' | 'hard'): Promise<PuzzleP
   const puzzle = await fetchRandomPuzzle(mode)
   pushRecentFromPuzzleId(puzzle.id)
   writePuzzleLock(mode, puzzle)
-  return puzzle
+  return puzzle as PromptByMode[M]
 }
 
 export function fetchLockedRandomEasy(): Promise<PuzzlePrompt> {
-  return fetchLockedRandomEasyHard('easy')
+  return fetchLockedRandom('easy')
 }
 
 export function fetchLockedRandomHard(): Promise<PuzzlePrompt> {
-  return fetchLockedRandomEasyHard('hard')
+  return fetchLockedRandom('hard')
 }
 
 export function fetchLockedRandomMedium(): Promise<MediumPrompt> {
-  return fetchLockedMedium()
-}
-
-async function fetchLockedMedium(): Promise<MediumPrompt> {
-  const locked = readPuzzleLock('medium')
-  if (locked) {
-    try {
-      const live = await fetchPuzzleById(locked.id, 'medium')
-      writePuzzleLock('medium', live)
-      return live
-    } catch (error) {
-      if (!isPuzzleNotFound(error)) {
-        throw error
-      }
-      clearPuzzleLock('medium')
-    }
-  }
-  const puzzle = await fetchRandomPuzzle('medium')
-  pushRecentFromPuzzleId(puzzle.id)
-  writePuzzleLock('medium', puzzle)
-  return puzzle
+  return fetchLockedRandom('medium')
 }
 
 async function solveOrClearLock<T>(mode: PuzzleMode, request: Promise<T>): Promise<T> {

@@ -84,13 +84,7 @@ export function useSolvePuzzle<M extends PuzzleMode, TVariables>(
   const revealing = solveMutation.isPending || solved
 
   const puzzleQuery = useQuery({
-    queryKey: nextQuery.queryKey,
-    queryFn: nextQuery.queryFn,
-    staleTime: nextQuery.staleTime,
-    gcTime: nextQuery.gcTime,
-    refetchOnWindowFocus: nextQuery.refetchOnWindowFocus,
-    refetchOnReconnect: nextQuery.refetchOnReconnect,
-    refetchOnMount: nextQuery.refetchOnMount,
+    ...nextQuery,
     enabled: !solved,
   })
 

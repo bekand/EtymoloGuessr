@@ -145,8 +145,8 @@ func TestRandomHardKeepsAncestorGloss(t *testing.T) {
 	if !foundAncestor {
 		t.Fatal("hard prompt should include ancestor nodes")
 	}
-	if len(payload.PromptGraph.Nodes) < minHardModeNodes {
-		t.Fatalf("hard prompt should have at least %d nodes, got %d", minHardModeNodes, len(payload.PromptGraph.Nodes))
+	if len(payload.PromptGraph.Nodes) < puzzle.MinHardModeNodes {
+		t.Fatalf("hard prompt should have at least %d nodes, got %d", puzzle.MinHardModeNodes, len(payload.PromptGraph.Nodes))
 	}
 }
 
@@ -192,7 +192,7 @@ func TestRandomHardServesFourNodePuzzleAmongSmallerOnes(t *testing.T) {
 	if payload.ID != large.ID {
 		t.Fatalf("id %q, want four-node puzzle %q", payload.ID, large.ID)
 	}
-	if payload.PromptGraph == nil || len(payload.PromptGraph.Nodes) < minHardModeNodes {
+	if payload.PromptGraph == nil || len(payload.PromptGraph.Nodes) < puzzle.MinHardModeNodes {
 		t.Fatal("hard prompt should include at least four nodes")
 	}
 }

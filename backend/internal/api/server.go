@@ -12,8 +12,6 @@ import (
 	"github.com/bekand/EtymoloGuessr/backend/internal/puzzle"
 )
 
-const minHardModeNodes = 4
-
 type Server struct {
 	store  puzzle.Store
 	logger *slog.Logger
@@ -71,10 +69,7 @@ func (s *Server) handleRandom(w http.ResponseWriter, r *http.Request) {
 		}
 		filter.MinQuality = &n
 	}
-	if mode == puzzle.ModeHard {
-		n := minHardModeNodes
-		filter.MinNodes = &n
-	}
+	filter = filter.ForMode(mode)
 
 	if mode == puzzle.ModeMedium {
 		puzzles, randErr := s.store.RandomPuzzles(r.Context(), filter, puzzle.MediumSetSize)
@@ -107,7 +102,7 @@ func (s *Server) handleRandom(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to load puzzle")
 		return
 	}
-	if !eligibleForMode(p, mode) {
+	if !puzzle.EligibleForMode(p, mode) {
 		writeError(w, http.StatusNotFound, "no enabled puzzles")
 		return
 	}
@@ -171,7 +166,7 @@ func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to load puzzle")
 		return
 	}
-	if !eligibleForMode(p, mode) {
+	if !puzzle.EligibleForMode(p, mode) {
 		writeError(w, http.StatusNotFound, "puzzle not found")
 		return
 	}
@@ -293,19 +288,15 @@ func (s *Server) loadMediumSet(w http.ResponseWriter, r *http.Request, id string
 		writeError(w, http.StatusBadRequest, err.Error())
 		return nil, err
 	}
-	puzzles := make([]*puzzle.Puzzle, 0, len(ids))
-	for _, puzzleID := range ids {
-		p, getErr := s.store.GetPuzzle(r.Context(), puzzleID)
-		if errors.Is(getErr, puzzle.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "puzzle not found")
-			return nil, getErr
-		}
-		if getErr != nil {
-			s.logger.Error("get puzzle", "err", getErr)
-			writeError(w, http.StatusInternalServerError, "failed to load puzzle")
-			return nil, getErr
-		}
-		puzzles = append(puzzles, p)
+	puzzles, getErr := s.store.GetPuzzles(r.Context(), ids)
+	if errors.Is(getErr, puzzle.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "puzzle not found")
+		return nil, getErr
+	}
+	if getErr != nil {
+		s.logger.Error("get medium puzzles", "err", getErr)
+		writeError(w, http.StatusInternalServerError, "failed to load puzzle")
+		return nil, getErr
 	}
 	return puzzles, nil
 }
@@ -330,16 +321,6 @@ type mediumPromptResponse struct {
 	ID     string       `json:"id"`
 	Mode   puzzle.Mode  `json:"mode"`
 	Leaves []mediumLeaf `json:"leaves"`
-}
-
-func eligibleForMode(p *puzzle.Puzzle, mode puzzle.Mode) bool {
-	if p == nil {
-		return false
-	}
-	if mode == puzzle.ModeHard && len(p.AnswerGraph.Nodes) < minHardModeNodes {
-		return false
-	}
-	return true
 }
 
 func promptPayload(p *puzzle.Puzzle, mode puzzle.Mode) promptResponse {

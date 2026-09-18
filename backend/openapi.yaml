@@ -22,7 +22,7 @@ paths:
           name: mode
           schema:
             type: string
-            enum: [easy, hard]
+            enum: [easy, hard, medium]
             default: easy
         - in: query
           name: langPair
@@ -33,13 +33,20 @@ paths:
           name: minQuality
           schema:
             type: integer
+        - in: query
+          name: exclude
+          description: Comma-separated or repeated puzzle IDs to avoid when selecting a random puzzle.
+          schema:
+            type: string
       responses:
         "200":
           description: Prompt without correctChoice or gold edges
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PuzzlePrompt"
+                oneOf:
+                  - $ref: "#/components/schemas/PuzzlePrompt"
+                  - $ref: "#/components/schemas/MediumPrompt"
         "400":
           description: Invalid mode
         "404":
@@ -61,7 +68,7 @@ paths:
           name: mode
           schema:
             type: string
-            enum: [easy, hard]
+            enum: [easy, hard, medium]
             default: easy
       responses:
         "200":
@@ -69,7 +76,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PuzzlePrompt"
+                oneOf:
+                  - $ref: "#/components/schemas/PuzzlePrompt"
+                  - $ref: "#/components/schemas/MediumPrompt"
         "400":
           description: Invalid mode
         "404":
@@ -149,7 +158,7 @@ components:
     SolveRequest:
       type: object
       properties:
-        mode: { type: string, enum: [easy, hard] }
+        mode: { type: string, enum: [easy, hard, medium] }
         choiceId: { type: string, description: Easy mode }
         edges:
           type: array
@@ -159,6 +168,14 @@ components:
             properties:
               from: { type: string }
               to: { type: string }
+        pairs:
+          type: array
+          description: Medium mode pairs of opaque leaf IDs.
+          items:
+            type: array
+            minItems: 2
+            maxItems: 2
+            items: { type: string }
     SolveResponse:
       type: object
       properties:
@@ -168,3 +185,25 @@ components:
           type: array
           items: { $ref: "#/components/schemas/Choice" }
         correctChoice: { type: string }
+        ancestors:
+          type: array
+          description: Medium mode common ancestors, in puzzle-set order.
+          items: { $ref: "#/components/schemas/Term" }
+    MediumLeaf:
+      type: object
+      required: [id, lang, term]
+      properties:
+        id: { type: string, description: Opaque leaf ID }
+        lang: { type: string }
+        term: { type: string }
+    MediumPrompt:
+      type: object
+      required: [id, mode, leaves]
+      properties:
+        id: { type: string, description: Comma-separated medium puzzle-set ID }
+        mode: { type: string, enum: [medium] }
+        leaves:
+          type: array
+          minItems: 8
+          maxItems: 8
+          items: { $ref: "#/components/schemas/MediumLeaf" }

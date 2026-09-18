@@ -16,6 +16,15 @@ type Store struct {
 	pool *pgxpool.Pool
 }
 
+const puzzleColumns = `id, enabled, leaf_a, leaf_b, answer_graph, choices, correct_choice, quality_score, lang_pair, source`
+
+const puzzleFilters = `
+WHERE enabled = true
+	AND ($1::text IS NULL OR lang_pair = $1)
+	AND ($2::int IS NULL OR quality_score >= $2)
+	AND ($3::int IS NULL OR jsonb_array_length(COALESCE(answer_graph->'nodes', '[]'::jsonb)) >= $3)
+	AND (cardinality($4::text[]) = 0 OR NOT (id = ANY ($4::text[])))`
+
 func NewStore(pool *pgxpool.Pool) *Store {
 	return &Store{pool: pool}
 }
@@ -27,24 +36,13 @@ func (s *Store) Ping(ctx context.Context) error {
 func (s *Store) RandomPuzzle(ctx context.Context, filter puzzle.Filter) (*puzzle.Puzzle, error) {
 	p, err := s.randomPuzzle(ctx, filter)
 	if errors.Is(err, puzzle.ErrNotFound) && len(filter.ExcludeIDs) > 0 {
-		noExclude := filter
-		noExclude.ExcludeIDs = nil
-		return s.randomPuzzle(ctx, noExclude)
+		return s.randomPuzzle(ctx, filter.WithoutExclusions())
 	}
 	return p, err
 }
 
 func (s *Store) randomPuzzle(ctx context.Context, filter puzzle.Filter) (*puzzle.Puzzle, error) {
-	const q = `
-SELECT id, enabled, leaf_a, leaf_b, answer_graph, choices, correct_choice, quality_score, lang_pair, source
-FROM puzzles
-WHERE enabled = true
-  AND ($1::text IS NULL OR lang_pair = $1)
-  AND ($2::int IS NULL OR quality_score >= $2)
-  AND ($3::int IS NULL OR jsonb_array_length(COALESCE(answer_graph->'nodes', '[]'::jsonb)) >= $3)
-  AND (cardinality($4::text[]) = 0 OR NOT (id = ANY ($4::text[])))
-ORDER BY random()
-LIMIT 1`
+	q := "SELECT " + puzzleColumns + " FROM puzzles" + puzzleFilters + " ORDER BY random() LIMIT 1"
 	var langPair *string
 	if filter.LangPair != "" {
 		langPair = &filter.LangPair
@@ -56,9 +54,7 @@ LIMIT 1`
 func (s *Store) RandomPuzzles(ctx context.Context, filter puzzle.Filter, n int) ([]*puzzle.Puzzle, error) {
 	picked, err := s.randomPuzzles(ctx, filter, n)
 	if (errors.Is(err, puzzle.ErrNotFound) || len(picked) < n) && len(filter.ExcludeIDs) > 0 {
-		noExclude := filter
-		noExclude.ExcludeIDs = nil
-		return s.randomPuzzles(ctx, noExclude, n)
+		return s.randomPuzzles(ctx, filter.WithoutExclusions(), n)
 	}
 	return picked, err
 }
@@ -71,16 +67,7 @@ func (s *Store) randomPuzzles(ctx context.Context, filter puzzle.Filter, n int) 
 	if limit < 40 {
 		limit = 40
 	}
-	const q = `
-SELECT id, enabled, leaf_a, leaf_b, answer_graph, choices, correct_choice, quality_score, lang_pair, source
-FROM puzzles
-WHERE enabled = true
-  AND ($1::text IS NULL OR lang_pair = $1)
-  AND ($2::int IS NULL OR quality_score >= $2)
-  AND ($3::int IS NULL OR jsonb_array_length(COALESCE(answer_graph->'nodes', '[]'::jsonb)) >= $3)
-  AND (cardinality($4::text[]) = 0 OR NOT (id = ANY ($4::text[])))
-ORDER BY random()
-LIMIT $5`
+	q := "SELECT " + puzzleColumns + " FROM puzzles" + puzzleFilters + " ORDER BY random() LIMIT $5"
 	var langPair *string
 	if filter.LangPair != "" {
 		langPair = &filter.LangPair
@@ -131,11 +118,40 @@ func normalizeExclude(ids []string) []string {
 }
 
 func (s *Store) GetPuzzle(ctx context.Context, id string) (*puzzle.Puzzle, error) {
-	const q = `
-SELECT id, enabled, leaf_a, leaf_b, answer_graph, choices, correct_choice, quality_score, lang_pair, source
-FROM puzzles
-WHERE id = $1 AND enabled = true`
+	const q = "SELECT " + puzzleColumns + " FROM puzzles WHERE id = $1 AND enabled = true"
 	return s.scanOne(ctx, q, id)
+}
+
+func (s *Store) GetPuzzles(ctx context.Context, ids []string) ([]*puzzle.Puzzle, error) {
+	if len(ids) == 0 {
+		return nil, puzzle.ErrNotFound
+	}
+	q := "SELECT " + puzzleColumns + " FROM puzzles WHERE id = ANY($1::text[]) AND enabled = true"
+	rows, err := s.pool.Query(ctx, q, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	byID := make(map[string]*puzzle.Puzzle, len(ids))
+	for rows.Next() {
+		p, scanErr := scanPuzzle(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		byID[p.ID] = p
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	puzzles := make([]*puzzle.Puzzle, 0, len(ids))
+	for _, id := range ids {
+		p, ok := byID[id]
+		if !ok {
+			return nil, puzzle.ErrNotFound
+		}
+		puzzles = append(puzzles, p)
+	}
+	return puzzles, nil
 }
 
 type rowScanner interface {
@@ -177,6 +193,11 @@ func scanPuzzle(row rowScanner) (*puzzle.Puzzle, error) {
 	}
 	if err := json.Unmarshal(choicesRaw, &p.Choices); err != nil {
 		return nil, fmt.Errorf("choices: %w", err)
+	}
+	if p.Enabled {
+		if err := p.Validate(); err != nil {
+			return nil, fmt.Errorf("puzzle %s: %w", p.ID, err)
+		}
 	}
 	return &p, nil
 }

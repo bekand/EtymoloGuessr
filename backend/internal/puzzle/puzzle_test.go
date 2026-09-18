@@ -30,6 +30,22 @@ func TestParseMode(t *testing.T) {
 	}
 }
 
+func TestModePolicy(t *testing.T) {
+	hardFilter := (Filter{}).ForMode(ModeHard)
+	if hardFilter.MinNodes == nil || *hardFilter.MinNodes != MinHardModeNodes {
+		t.Fatalf("hard filter min nodes = %v, want %d", hardFilter.MinNodes, MinHardModeNodes)
+	}
+	if (Filter{}).ForMode(ModeEasy).MinNodes != nil {
+		t.Fatal("easy filter should not set a minimum node count")
+	}
+	if EligibleForMode(&Puzzle{AnswerGraph: Graph{Nodes: make([]Node, MinHardModeNodes-1)}}, ModeHard) {
+		t.Fatal("hard mode should reject a puzzle below the node threshold")
+	}
+	if !EligibleForMode(&Puzzle{AnswerGraph: Graph{Nodes: make([]Node, MinHardModeNodes)}}, ModeHard) {
+		t.Fatal("hard mode should accept a puzzle at the node threshold")
+	}
+}
+
 func TestPromptGraphEasyIsNil(t *testing.T) {
 	if g := PromptGraph(sampleGraph(), ModeEasy); g != nil {
 		t.Fatalf("easy prompt should be omitted, got %#v", g)
@@ -100,6 +116,25 @@ func TestChoiceCorrect(t *testing.T) {
 	}
 	if ChoiceCorrect(nil, "c0") || ChoiceCorrect(p, "") {
 		t.Fatal("nil puzzle or empty id should be incorrect")
+	}
+}
+
+func TestPuzzleValidate(t *testing.T) {
+	p := &Puzzle{
+		ID:            "p1",
+		LeafA:         json.RawMessage(`{"lang":"English","term":"father"}`),
+		LeafB:         json.RawMessage(`{"lang":"German","term":"Vater"}`),
+		AnswerGraph:   sampleGraph(),
+		Choices:       []Choice{{ID: "c0", Gloss: "father"}},
+		CorrectChoice: "c0",
+	}
+	if err := p.Validate(); err != nil {
+		t.Fatalf("valid puzzle rejected: %v", err)
+	}
+
+	p.LeafA = json.RawMessage(`{"lang":"English"}`)
+	if err := p.Validate(); err == nil {
+		t.Fatal("invalid leaf should be rejected")
 	}
 }
 

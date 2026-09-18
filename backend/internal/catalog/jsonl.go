@@ -48,8 +48,10 @@ func Load(r io.Reader) (*MemoryStore, error) {
 		if err := json.Unmarshal([]byte(line), &p); err != nil {
 			return nil, fmt.Errorf("catalog: line %d: %w", lineNo, err)
 		}
-		if p.ID == "" {
-			return nil, fmt.Errorf("catalog: line %d: missing id", lineNo)
+		if p.Enabled {
+			if err := p.Validate(); err != nil {
+				return nil, fmt.Errorf("catalog: line %d: invalid puzzle: %w", lineNo, err)
+			}
 		}
 		puzzles = append(puzzles, &p)
 	}

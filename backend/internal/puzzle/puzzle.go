@@ -86,10 +86,80 @@ type Filter struct {
 	ExcludeIDs []string
 }
 
+const MinHardModeNodes = 4
+
+func (f Filter) ForMode(mode Mode) Filter {
+	if mode == ModeHard {
+		n := MinHardModeNodes
+		f.MinNodes = &n
+	}
+	return f
+}
+
+func (f Filter) WithoutExclusions() Filter {
+	f.ExcludeIDs = nil
+	return f
+}
+
 type Store interface {
 	RandomPuzzle(ctx context.Context, filter Filter) (*Puzzle, error)
 	RandomPuzzles(ctx context.Context, filter Filter, n int) ([]*Puzzle, error)
 	GetPuzzle(ctx context.Context, id string) (*Puzzle, error)
+	GetPuzzles(ctx context.Context, ids []string) ([]*Puzzle, error)
+}
+
+func (p *Puzzle) Validate() error {
+	if p == nil {
+		return errors.New("puzzle is nil")
+	}
+	if strings.TrimSpace(p.ID) == "" {
+		return errors.New("puzzle id is missing")
+	}
+	if _, err := DecodeTerm(p.LeafA); err != nil {
+		return fmt.Errorf("leaf_a: %w", err)
+	}
+	if _, err := DecodeTerm(p.LeafB); err != nil {
+		return fmt.Errorf("leaf_b: %w", err)
+	}
+	if len(p.AnswerGraph.Nodes) == 0 {
+		return errors.New("answer graph has no nodes")
+	}
+	nodeIDs := make(map[string]struct{}, len(p.AnswerGraph.Nodes))
+	for _, node := range p.AnswerGraph.Nodes {
+		if strings.TrimSpace(node.ID) == "" || strings.TrimSpace(node.Lang) == "" || strings.TrimSpace(node.Term) == "" {
+			return errors.New("answer graph contains an incomplete node")
+		}
+		nodeIDs[node.ID] = struct{}{}
+	}
+	for _, edge := range p.AnswerGraph.Edges {
+		if _, ok := nodeIDs[edge.From]; !ok {
+			return fmt.Errorf("answer graph edge references unknown node %q", edge.From)
+		}
+		if _, ok := nodeIDs[edge.To]; !ok {
+			return fmt.Errorf("answer graph edge references unknown node %q", edge.To)
+		}
+	}
+	if len(p.Choices) == 0 {
+		return errors.New("puzzle has no choices")
+	}
+	choiceIDs := make(map[string]struct{}, len(p.Choices))
+	for _, choice := range p.Choices {
+		if strings.TrimSpace(choice.ID) == "" {
+			return errors.New("puzzle contains a choice without an id")
+		}
+		choiceIDs[choice.ID] = struct{}{}
+	}
+	if _, ok := choiceIDs[p.CorrectChoice]; !ok {
+		return fmt.Errorf("correct choice %q is not present", p.CorrectChoice)
+	}
+	return nil
+}
+
+func EligibleForMode(p *Puzzle, mode Mode) bool {
+	if p == nil {
+		return false
+	}
+	return mode != ModeHard || len(p.AnswerGraph.Nodes) >= MinHardModeNodes
 }
 
 func PromptGraph(answer Graph, mode Mode) *Graph {
