@@ -2,7 +2,36 @@ name: test
 
 on:
   push:
+    branches: [main]
+    paths:
+      - '.github/workflows/test.yml'
+      - 'backend/**'
+      - 'frontend/**'
+      - 'etl/**'
+      - 'pyproject.toml'
+      - 'docker-compose.yml'
+      - 'docker-compose.test.yml'
+      - 'backend/go.mod'
+      - 'backend/go.sum'
+      - 'frontend/package.json'
+      - 'frontend/pnpm-lock.yaml'
   pull_request:
+    paths:
+      - '.github/workflows/test.yml'
+      - 'backend/**'
+      - 'frontend/**'
+      - 'etl/**'
+      - 'pyproject.toml'
+      - 'docker-compose.yml'
+      - 'docker-compose.test.yml'
+      - 'backend/go.mod'
+      - 'backend/go.sum'
+      - 'frontend/package.json'
+      - 'frontend/pnpm-lock.yaml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   offline:
