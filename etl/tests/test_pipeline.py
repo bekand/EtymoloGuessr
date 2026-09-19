@@ -16,6 +16,7 @@ from etl.derive import (
 )
 from etl.generate import (
     Funnel,
+    assess_pair,
     build_graph,
     extract_candidates,
     involves_english,
@@ -29,7 +30,6 @@ from etl.generate import (
 from etl.ids import puzzle_id
 from etl.models import GraphEdge, Puzzle, node_id
 from etl.quality import (
-    assess_pair,
     meaning_overlap,
     normalize_label,
     quality_score,
@@ -662,6 +662,10 @@ def test_meaning_overlap_helpers():
     assert shares_meaning("dragon", "a dragon or monster", head_only=True)
     assert not shares_meaning("gift", "poison", head_only=True)
     assert not shares_meaning("present", "something given", head_only=True)
+    # Lemmatized gloss tokens: plural / inflectional variants share meaning.
+    assert shares_meaning("dog", "dogs used for hunting")
+    assert shares_meaning("a walk outdoors", "walking outdoors")
+    assert shares_meaning("gift", "wrapped gifts")
 
 
 def test_puzzle_id_order_invariant():
@@ -674,7 +678,7 @@ def test_puzzle_id_order_invariant():
 
 
 def test_quality_score_is_integer_rubric():
-    """Five −1 axes; structural hard rejects stay out of the score."""
+    """Five −1 axes; structural + English term/gloss hard rejects stay out of the score."""
     perfect: dict[str, Any] = dict(
         term_a="hound",
         term_b="cadeia",
@@ -726,6 +730,31 @@ def test_quality_score_is_integer_rubric():
         )
         == 4
     )  # similar spelling only
+    # Early exit: two cheap misses already fail min_quality=4; skip later axes.
+    early = quality_score(
+        lang_a="English",
+        lang_b="English",  # miss 1: same lang
+        term_a="gift",
+        term_b="Gift",  # miss 2: similar spelling
+        gloss_a="a domestic dog",
+        gloss_b="a prison building",
+        lca_term="*giftiz",
+        lca_gloss="a dog or hound",  # would also miss meaning-vs-LCA if scored fully
+        min_quality=4,
+    )
+    assert early == 3
+    full = quality_score(
+        lang_a="English",
+        lang_b="English",
+        term_a="gift",
+        term_b="Gift",
+        gloss_a="a domestic dog",
+        gloss_b="a prison building",
+        lca_term="*giftiz",
+        lca_gloss="a dog or hound",
+        min_quality=0,
+    )
+    assert full == 2  # same lang + similar spelling + meaning vs LCA
     # assess_pair: structural + score; soft misses are not hard rejects.
     ok = assess_pair(
         lang_a="English",
@@ -774,11 +803,63 @@ def test_quality_score_is_integer_rubric():
         lca_gloss="short root",
     )
     assert short.reject == "term_too_short"
+    # English leaf term == first content token of LCA gloss is a hard reject.
+    en_term_gloss = assess_pair(
+        lang_a="English",
+        lang_b="Portuguese",
+        term_a="gift",
+        gloss_a="a wrapped present",
+        term_b="cadeia",
+        gloss_b="a metal restraint",
+        lca_term="*giftiz",
+        lca_gloss="a gift",
+    )
+    assert en_term_gloss.reject == "english_term_is_lca_gloss"
+    # Leading gloss head still matches even with trailing synonyms.
+    en_term_head = assess_pair(
+        lang_a="English",
+        lang_b="Portuguese",
+        term_a="tunic",
+        gloss_a="a sleeveless garment",
+        term_b="cadeia",
+        gloss_b="a metal restraint",
+        lca_term="tunica",
+        lca_gloss="tunic, robe",
+    )
+    assert en_term_head.reject == "english_term_is_lca_gloss"
+    # First gloss content token differs from the English term — keep.
+    en_term_other = assess_pair(
+        lang_a="English",
+        lang_b="Portuguese",
+        term_a="gift",
+        gloss_a="a wrapped parcel",
+        term_b="cadeia",
+        gloss_b="a metal restraint",
+        lca_term="*giftiz",
+        lca_gloss="ancient ancestral transfer",
+    )
+    assert en_term_other.reject is None
+    assert en_term_other.quality == 5
+    # German leaf term matching an English gloss is not this filter.
+    de_ok = assess_pair(
+        lang_a="German",
+        lang_b="Portuguese",
+        term_a="Gift",
+        gloss_a="a toxic poison",
+        term_b="cadeia",
+        gloss_b="a metal restraint",
+        lca_term="*giftiz",
+        lca_gloss="gift",
+    )
+    assert de_ok.reject is None
+    assert de_ok.quality == 5
 
 
 def test_make_choices_requires_real_distractors():
     rng = __import__("random").Random(1)
     assert make_choices("ancestor gloss", ["only one other"], n_choices=4, rng=rng) is None
+    # Pool is expected to be pre-filtered (unique lexical glosses); redirects are
+    # stripped once in generate_puzzles before emit.
     built = make_choices(
         "ancestor gloss",
         [
@@ -786,8 +867,6 @@ def test_make_choices_requires_real_distractors():
             "sense b",
             "sense c",
             "ancestor gloss",
-            "alternative form of cappa",
-            "synonym of canō",
         ],
         n_choices=4,
         rng=rng,
@@ -798,7 +877,6 @@ def test_make_choices_requires_real_distractors():
     assert len(glosses) == 4
     assert len(set(glosses)) == 4
     assert all(not g.startswith("(unrelated)") for g in glosses)
-    assert all(not is_redirect_gloss(g) for g in glosses)
     assert choices[[choice["id"] for choice in choices].index(correct_id)]["gloss"] == "ancestor gloss"
 
 

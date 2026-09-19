@@ -6,6 +6,7 @@ import sys
 import time
 import unicodedata
 from collections import Counter, defaultdict, deque
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
@@ -25,7 +26,7 @@ from etl.derive import (
 from etl.ids import puzzle_id
 from etl.models import GraphEdge, GraphNode, Puzzle, node_id
 from etl.paths import load_config, reports_dir
-from etl.quality import assess_pair, term_too_short
+from etl.quality import content_tokens, quality_score
 
 log = logging.getLogger(__name__)
 
@@ -36,6 +37,88 @@ _PROPER_NOUN_CASE_LANGS = frozenset({"English", "Spanish", "Portuguese"})
 # Modern languages that may be puzzle leaves but must not appear as gold-graph
 # intermediates (loan hops like Spanish→English→Latin).
 _MODERN_LEAF_LANGS = frozenset({"English", "Spanish", "Portuguese", "German"})
+
+MIN_TERM_LENGTH = 3
+
+
+@dataclass(frozen=True)
+class PairAssessment:
+    """Outcome of hard filters + quality scoring for one leaf pair / LCA."""
+
+    reject: str | None = None
+    quality: int = 0
+
+
+def term_too_short(term: str | None) -> bool:
+    """True when a headword is missing or shorter than MIN_TERM_LENGTH."""
+    if not term:
+        return True
+    return len(term.strip()) < MIN_TERM_LENGTH
+
+
+def english_term_is_lca_gloss(lang: str, term: str | None, lca_gloss: str | None) -> bool:
+    """True when an English leaf term matches the LCA gloss's first content token.
+
+    Articles / function words are ignored; no lemmatization. So ``tunic`` matches
+    ``tunic, robe`` and ``a tunic``. Non-English leaves always return False.
+    """
+    if lang != "English":
+        return False
+    term_tokens = content_tokens(term)
+    gloss_head = content_tokens(lca_gloss, head_only=True)
+    if not term_tokens or not gloss_head:
+        return False
+    return term_tokens == gloss_head
+
+
+def lca_structural_reject(lca_term: str | None, lca_gloss: str | None) -> str | None:
+    """Funnel reason when the chosen LCA is unusable, or None to continue."""
+    if term_too_short(lca_term):
+        return "term_too_short"
+    if not lca_gloss:
+        return "no_gloss"
+    if is_grammatical_gloss(lca_gloss):
+        return "inflection_lca"
+    return None
+
+
+def assess_pair(
+    *,
+    lang_a: str,
+    lang_b: str,
+    term_a: str,
+    gloss_a: str | None,
+    term_b: str,
+    gloss_b: str | None,
+    lca_term: str | None,
+    lca_gloss: str | None,
+    min_quality: int = 0,
+) -> PairAssessment:
+    """Hard-filter a leaf pair / LCA, then score soft divergence axes.
+
+    On reject, ``quality`` is 0.
+    """
+    structural = lca_structural_reject(lca_term, lca_gloss)
+    if structural:
+        return PairAssessment(reject=structural)
+
+    if english_term_is_lca_gloss(lang_a, term_a, lca_gloss) or english_term_is_lca_gloss(
+        lang_b, term_b, lca_gloss
+    ):
+        return PairAssessment(reject="english_term_is_lca_gloss")
+
+    score = quality_score(
+        lang_a=lang_a,
+        lang_b=lang_b,
+        term_a=term_a,
+        term_b=term_b,
+        gloss_a=gloss_a,
+        gloss_b=gloss_b,
+        lca_term=lca_term,
+        lca_gloss=lca_gloss,
+        min_quality=min_quality,
+    )
+    return PairAssessment(quality=score)
 
 
 def is_proper_noun_leaf(lang: str, term: str) -> bool:
@@ -633,6 +716,7 @@ def extract_candidates(
             gloss_b=gloss_b,
             lca_term=lca_term,
             lca_gloss=lca_gloss,
+            min_quality=min_quality,
         )
         if assessment.reject:
             funnel.bump(assessment.reject)
@@ -715,22 +799,14 @@ def make_choices(
 ) -> tuple[list[dict[str, Any]], str] | None:
     """Build MC choices from real distractor glosses, or None if the pool is too thin.
 
-    Does not invent placeholder senses. Callers must reject the candidate when
-    this returns None (funnel: insufficient_distractors).
+    ``distractor_pool`` should already be unique lexical glosses (callers pre-filter
+    redirects / grammatical stubs once). Does not invent placeholder senses.
     """
     need = n_choices - 1
-    unique: list[str] = []
-    for gloss in distractor_pool:
-        if gloss == correct_gloss:
-            continue
-        if is_redirect_gloss(gloss) or is_grammatical_gloss(gloss):
-            continue
-        if gloss not in unique:
-            unique.append(gloss)
-    if len(unique) < need:
+    others = [gloss for gloss in distractor_pool if gloss != correct_gloss]
+    if len(others) < need:
         return None
-    rng.shuffle(unique)
-    picked = unique[:need]
+    picked = rng.sample(others, need)
     options = [correct_gloss] + picked
     rng.shuffle(options)
     choices = [{"id": f"c{i}", "gloss": gloss} for i, gloss in enumerate(options)]
@@ -869,7 +945,18 @@ def generate_puzzles(
     # Build distractors from the full quality-passing candidate set *before* leaf
     # reuse / emit slicing. Slicing first (as in an earlier revision) left `--n`
     # small batches with too few unique LCA glosses and forced placeholders.
-    distractor_pool = [c["lca"]["gloss"] for c in candidates if c["lca"].get("gloss")]
+    # Pre-filter once: make_choices used to re-scan the whole pool (with redirect /
+    # grammatical checks) per candidate — O(candidates × pool) and multi-hour emits.
+    distractor_pool: list[str] = []
+    seen_glosses: set[str] = set()
+    for cand in candidates:
+        gloss = cand["lca"].get("gloss")
+        if not gloss or gloss in seen_glosses:
+            continue
+        if is_redirect_gloss(gloss) or is_grammatical_gloss(gloss):
+            continue
+        seen_glosses.add(gloss)
+        distractor_pool.append(gloss)
 
     # Quality-first, then English vs non-English water-fill with seeded shuffles
     # so A-words and de-en do not lock shared leaves before other pairs.

@@ -62,31 +62,34 @@ A full refresh is tens of minutes and hundreds of MB. The usual loop is `generat
 
 1. **Reduce graph** — keep leaf langs English / Spanish / Portuguese / German and the ancestor allowlist in config; keep `inherited_from`, `borrowed_from`, `derived_from`, `root`, `cognate_of`, `doublet_with`; drop null related terms, multiword junk, affixes. Drop **cross-term leaf→leaf** ancestor hops (`hipoxia`→`oxygen`) but keep same-term loans (`panel`→`panel`). Align ancestor edges to the winning-gloss parent allowlist; Latin-family nodes with the same macron-folded spelling share reachability (`Late Latin:apostrŏphus` via `Latin:apostrophus`).
 2. **Index glosses** — first *lexical* gloss per `(lang, term)` (skip `form_of` / grammatical-form senses and Wiktionary redirect stubs like `alternative form of …` / `synonym of …`; strip Wiktionary case-government labels like `[with genitive]`). Form-only grammatical entries inherit the citation lemma’s gloss and are recorded in `lemma_index.json` (so LCAs can be rewritten to that lemma). Redirect-only entries inherit the target’s meaning **without** a `lemma_index` entry (surface spelling stays in the gold graph). Puzzles with no LCA gloss are skipped (`no_gloss`).
-3. **Extract puzzles** — two modern leaves and their closest connecting subgraph / LCA (at most 9 nodes; `too_big` otherwise), prefer cross-language via quality score, rewrite form-only LCAs to the citation lemma (`Latin:addere` → `Latin:addō`), unify ancestor nodes that share a gloss (same language with different spelling, or Latin-family langs with the same macron-folded spelling—prefer Classical Latin), then hard-filter + score in [`etl/quality.py`](etl/quality.py) (`assess_pair`: short/unglossed/inflection LCA only, then five-axis integer `quality_score`), 4-way multiple-choice from other LCA glosses.
+3. **Extract puzzles** — two modern leaves and their closest connecting subgraph / LCA (at most 9 nodes; `too_big` otherwise), prefer cross-language via quality score, rewrite form-only LCAs to the citation lemma (`Latin:addere` → `Latin:addō`), unify ancestor nodes that share a gloss (same language with different spelling, or Latin-family langs with the same macron-folded spelling—prefer Classical Latin), then hard-filter in [`etl/generate.py`](etl/generate.py) (`assess_pair`: short/unglossed/inflection LCA, English term≡LCA gloss) and soft-score via [`etl/quality.py`](etl/quality.py) (`quality_score` cheap→expensive with early exit vs `min_quality`), 4-way multiple-choice from other LCA glosses.
 4. **Ids** — SHA-256 of `(leaf_a, leaf_b, lca, gold edges)` so `etl load` upserts instead of duplicating. `generate --db` truncates first, then upserts. `--seed` shuffles English/non-English emit buckets (pair selection) and multiple-choice options.
 
 Walks toward ancestors use `inherited_from` / `borrowed_from` / `derived_from` / `root` only.
 
 ## Quality score
 
-Integer 0-5, stored on each puzzle. Start at 5; −1 for each missed divergence axis:
+Integer 0-5, stored on each puzzle. Start at 5; −1 for each missed divergence axis. Axes are evaluated **cheap → expensive** and may **early-exit** once the running score cannot meet `--min-quality` (so a discarded candidate’s stored lower bound may omit later meaning checks):
 
-| Miss | −1 when |
-|---|---|
-| Meaning vs LCA | Either leaf **gloss** shares a content token with the LCA gloss (English glosses; not leaf terms) |
-| Spelling vs LCA | Either leaf term equals the LCA term after `normalize_label` |
-| Spelling vs each other | Leaf terms equal after normalize, or both length ≥ 3 with the same 3-char prefix |
-| Meaning vs each other | Leaf glosses share a content token |
-| Same language | Both leaves share a language |
+| Order | Miss | −1 when |
+|---|---|---|
+| 1 | Same language | Both leaves share a language |
+| 2 | Spelling vs LCA | Either leaf term equals the LCA term after `normalize_label` |
+| 3 | Spelling vs each other | Leaf terms equal after normalize, or both length ≥ 3 with the same 3-char prefix |
+| 4 | Meaning vs each other | Leaf glosses share a **lemmatized** content token |
+| 5 | Meaning vs LCA | Either leaf **gloss** shares a **lemmatized** content token with the LCA gloss (English glosses; not leaf terms) |
+
+Meaning checks use `simplemma` English lemmas (`dogs` ↔ `dog`). Spelling axes stay orthographic (no lemmatization).
 
 Default `--min-quality` is config `generate.min_quality` (currently 4), so a puzzle may miss at most one axis.
 
 ### Leaf filters and batch diversity
 
 - **Proper nouns** — English / Spanish / Portuguese leaves whose term starts with an uppercase letter are skipped (`proper_noun_leaf`). German is exempt (common nouns are capitalized).
+- **English term is LCA gloss** — when an English leaf’s term matches the LCA gloss’s **first** content token after dropping articles/function words (`gift` vs `a gift`, `tunic` vs `tunic, robe`), the pair is rejected (`english_term_is_lca_gloss`). Non-English leaves are not checked this way.
 - **Short / unglossed terms** — leaf or LCA headwords shorter than 3 characters are skipped (`term_too_short`); missing LCA gloss uses existing `no_gloss`; missing leaf gloss uses `no_gloss_leaf`.
 - **Form-only LCA** — if the closest ancestor is only a grammatical form (infinitive, supine, inflected case, …) and Wiktionary points at a citation lemma, the gold node is replaced by that lemma and the multiple-choice answer uses the lemma’s meaning. Homographs with a real lexical sense (Latin *factum* “deed”) are left alone. Glosses that still look like `accusative … of …` or `[with genitive]` are rejected (`inflection_lca`). Redirect stubs (`alternative form of …`, `synonym of …`, …) inherit the target lemma’s meaning at index/lookup time but **do not** rewrite the gold node spelling (Old French *amirail* stays *amirail*). Unresolved redirects are dropped via `no_gloss` / `no_gloss_leaf` and never used as distractors.
-- **Hard rejects (structural only)** — `term_too_short`, `no_gloss`, `inflection_lca`. Divergence (meaning, spelling, same language) is scored, not hard-rejected.
+- **Hard rejects** — `term_too_short`, `no_gloss`, `inflection_lca`, `english_term_is_lca_gloss`. Divergence (meaning, spelling, same language) is scored, not hard-rejected.
 - **Modern-language ancestors** — intermediate (non-leaf) nodes in English / Spanish / Portuguese / German are rejected (`modern_lang_ancestor`); gold paths must go through historical ancestors only.
 - **Nonlexical ancestor glosses** — any ancestor whose gloss is still grammatical (`personal pronoun`, `… case`, …) or an unresolved redirect stub (including `diminutive of …`) is rejected (`nonlexical_ancestor` / `inflection_lca`).
 - **Unify same-gloss ancestors** — before emit, collapse duplicate ancestor nodes that share an exact gloss: (1) same language with different spelling (`Latin:planēta` / `Latin:planeta`), or (2) Latin-family langs with the same macron-folded spelling (`Latin:bursa` / `Late Latin:bursa`). Prefer the LCA if present, else Classical `Latin`, else the diacritic form. Edges are remapped; self-loops dropped.
@@ -161,7 +164,7 @@ cp data/puzzles/puzzles.jsonl backend/internal/catalog/puzzles.jsonl
 
 With `--n > 0`, candidate search **early-exits** once enough quality survivors are found (and only walks leaf pairs that share an ancestor). Use `--n 0` for a full pass. Early exit can change which top-N puzzles you get versus an exhaustive quality sort over every pair.
 
-Rejection reasons in the funnel include `no_gloss`, `term_too_short`, `inflection_lca`, `nonlexical_ancestor`, `modern_lang_ancestor`, `too_big`, `no_lca`, `proper_noun_leaf`, `below_min_quality`, `leaf_reuse`, `insufficient_distractors`, `early_exit`.
+Rejection reasons in the funnel include `no_gloss`, `term_too_short`, `inflection_lca`, `english_term_is_lca_gloss`, `nonlexical_ancestor`, `modern_lang_ancestor`, `too_big`, `no_lca`, `proper_noun_leaf`, `below_min_quality`, `leaf_reuse`, `insufficient_distractors`, `early_exit`.
 
 ### `etl reset`
 
