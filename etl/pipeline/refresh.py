@@ -20,9 +20,11 @@ NOTICE = """Etymology data
 Derived from Wiktionary (https://en.wiktionary.org/) via:
 
 - etymology-db (https://github.com/droher/etymology-db) — CC BY-SA 3.0
-- wiktextract / kaikki.org dictionary dumps — Wiktionary, CC BY-SA
+- wiktextract / Kaikki (https://kaikki.org/) dictionary dumps — Wiktionary, CC BY-SA 4.0
 
-Downstream puzzle data remains CC BY-SA 3.0 (share-alike).
+Downstream puzzle data and served puzzle JSON are licensed under
+CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/).
+Material has been modified for puzzle generation.
 """
 
 

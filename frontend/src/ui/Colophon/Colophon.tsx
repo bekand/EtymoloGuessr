@@ -26,19 +26,28 @@ export function Colophon({ className }: ColophonProps) {
           rel="noreferrer noopener"
         >
           etymology-db
+        </a>{' '}
+        and{' '}
+        <a
+          href="https://kaikki.org/"
+          target="_blank"
+          rel="noreferrer noopener"
+        >
+          Kaikki
         </a>
         .
       </p>
       <p className="line">
         Licensed under{' '}
         <a
-          href="https://creativecommons.org/licenses/by-sa/3.0/"
+          href="https://creativecommons.org/licenses/by-sa/4.0/"
           target="_blank"
           rel="noreferrer noopener"
         >
-          CC BY-SA 3.0
+          CC BY-SA 4.0
         </a>
-        . Material has been modified for puzzle generation. It may contain errors, ommissions, and/or simplifications.
+        . Material has been modified for puzzle generation. It may contain
+        errors, omissions, and/or simplifications.
       </p>
     </footer>
   )
