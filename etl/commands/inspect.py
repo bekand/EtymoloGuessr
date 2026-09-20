@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from etl.models import Puzzle
+from etl.core.models import Puzzle
 
 
 def format_puzzle(p: Puzzle) -> str:

@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from etl.derive import derived_ready
-from etl.paths import data_dir, database_url, load_config, raw_dir
-from etl.refresh import sha256_file
+from etl.core.paths import data_dir, database_url, load_config, raw_dir
+from etl.pipeline.derive import derived_ready
+from etl.pipeline.refresh import sha256_file
 
 
 def disk_estimate_bytes(cfg: dict[str, Any] | None = None) -> int:
@@ -53,7 +53,7 @@ def raw_status() -> dict[str, Any]:
 
 
 def doctor_report() -> dict[str, Any]:
-    from etl.db import ping
+    from etl.store.db import ping
 
     raw = raw_status()
     derived_ok = derived_ready()

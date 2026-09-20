@@ -6,7 +6,8 @@ from typing import Any
 
 import yaml
 
-PACKAGE_DIR = Path(__file__).resolve().parent
+CORE_DIR = Path(__file__).resolve().parent
+PACKAGE_DIR = CORE_DIR.parent
 REPO_ROOT = PACKAGE_DIR.parent
 FIXTURES_DIR = PACKAGE_DIR / "fixtures"
 

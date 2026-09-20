@@ -5,9 +5,9 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from etl.derive import derived_meta_path, load_derived_edges, derived_ready
-from etl.iojson import read_jsonl
-from etl.paths import default_puzzles_jsonl, reports_dir
+from etl.core.paths import default_puzzles_jsonl, reports_dir
+from etl.pipeline.derive import derived_meta_path, load_derived_edges, derived_ready
+from etl.store.iojson import read_jsonl
 
 
 def edge_stats() -> dict[str, Any]:

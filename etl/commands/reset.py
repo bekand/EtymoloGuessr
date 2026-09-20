@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import shutil
 
-from etl.paths import derived_dir, puzzles_dir, raw_dir, reports_dir
+from etl.core.paths import derived_dir, puzzles_dir, raw_dir, reports_dir
 
 log = logging.getLogger(__name__)
 

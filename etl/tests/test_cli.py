@@ -196,7 +196,7 @@ def test_generate_db_dry_run_does_not_write(data_home: Path, monkeypatch: pytest
 def test_database_url_missing_config_returns_none(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.setenv("ETL_CONFIG", str(tmp_path / "nope.yaml"))
-    from etl.paths import database_url
+    from etl.core.paths import database_url
 
     assert database_url() is None
 
@@ -206,7 +206,7 @@ def test_database_url_invalid_yaml_returns_none(monkeypatch: pytest.MonkeyPatch,
     bad.write_text(":\n  - not: valid: yaml: [", encoding="utf-8")
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.setenv("ETL_CONFIG", str(bad))
-    from etl.paths import database_url
+    from etl.core.paths import database_url
 
     assert database_url() is None
 
@@ -214,7 +214,7 @@ def test_database_url_invalid_yaml_returns_none(monkeypatch: pytest.MonkeyPatch,
 def test_database_url_env_wins_over_broken_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     monkeypatch.setenv("ETL_CONFIG", str(tmp_path / "nope.yaml"))
     monkeypatch.setenv("DATABASE_URL", "postgres://from-env")
-    from etl.paths import database_url
+    from etl.core.paths import database_url
 
     assert database_url() == "postgres://from-env"
 

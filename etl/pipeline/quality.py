@@ -1,14 +1,17 @@
 """Quality scoring for puzzle candidates (soft divergence axes only).
 
 Hard rejects (short/unglossed/inflection LCA, English term≡LCA gloss, …)
-live in ``etl.generate``.
+live in ``assess_pair`` below; soft axes in ``quality_score``.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from functools import lru_cache
 
 from simplemma import lemmatize as _simplemma_lemmatize
+
+from etl.pipeline.gloss import is_grammatical_gloss
 
 FUNCTION_WORDS = {
     "a",
@@ -162,3 +165,87 @@ def quality_score(
         score -= 1
 
     return max(0, score)
+
+
+MIN_TERM_LENGTH = 3
+
+
+@dataclass(frozen=True)
+class PairAssessment:
+    """Outcome of hard filters + quality scoring for one leaf pair / LCA."""
+
+    reject: str | None = None
+    quality: int = 0
+
+
+def term_too_short(term: str | None) -> bool:
+    """True when a headword is missing or shorter than MIN_TERM_LENGTH."""
+    if not term:
+        return True
+    return len(term.strip()) < MIN_TERM_LENGTH
+
+
+def english_term_is_lca_gloss(lang: str, term: str | None, lca_gloss: str | None) -> bool:
+    """True when an English leaf term matches the LCA gloss's first content token.
+
+    Articles / function words are ignored; no lemmatization. So ``tunic`` matches
+    ``tunic, robe`` and ``a tunic``. Non-English leaves always return False.
+    """
+    if lang != "English":
+        return False
+    term_tokens = content_tokens(term)
+    gloss_head = content_tokens(lca_gloss, head_only=True)
+    if not term_tokens or not gloss_head:
+        return False
+    return term_tokens == gloss_head
+
+
+def lca_structural_reject(lca_term: str | None, lca_gloss: str | None) -> str | None:
+    """Funnel reason when the chosen LCA is unusable, or None to continue."""
+    if term_too_short(lca_term):
+        return "term_too_short"
+    if not lca_gloss:
+        return "no_gloss"
+    if is_grammatical_gloss(lca_gloss):
+        return "inflection_lca"
+    return None
+
+
+def assess_pair(
+    *,
+    lang_a: str,
+    lang_b: str,
+    term_a: str,
+    gloss_a: str | None,
+    term_b: str,
+    gloss_b: str | None,
+    lca_term: str | None,
+    lca_gloss: str | None,
+    min_quality: int = 0,
+) -> PairAssessment:
+    """Hard-filter a leaf pair / LCA, then score soft divergence axes.
+
+    On reject, ``quality`` is 0.
+    """
+    structural = lca_structural_reject(lca_term, lca_gloss)
+    if structural:
+        return PairAssessment(reject=structural)
+
+    if english_term_is_lca_gloss(lang_a, term_a, lca_gloss) or english_term_is_lca_gloss(
+        lang_b, term_b, lca_gloss
+    ):
+        return PairAssessment(reject="english_term_is_lca_gloss")
+
+    score = quality_score(
+        lang_a=lang_a,
+        lang_b=lang_b,
+        term_a=term_a,
+        term_b=term_b,
+        gloss_a=gloss_a,
+        gloss_b=gloss_b,
+        lca_term=lca_term,
+        lca_gloss=lca_gloss,
+        min_quality=min_quality,
+    )
+    return PairAssessment(quality=score)
+

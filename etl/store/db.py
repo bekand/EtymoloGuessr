@@ -7,8 +7,8 @@ import psycopg
 from psycopg import sql
 from psycopg.types.json import Jsonb
 
-from etl.models import Puzzle
-from etl.paths import database_url
+from etl.core.models import Puzzle
+from etl.core.paths import database_url
 
 PUZZLES_COLUMNS = (
     "id",

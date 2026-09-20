@@ -21,7 +21,7 @@ backend/
 
 ## What it stores
 
-Table `puzzles` (created on API startup when `AUTO_MIGRATE` is true). Columns match `etl/db.py` upserts:
+Table `puzzles` (created on API startup when `AUTO_MIGRATE` is true). Columns match `etl/store/db.py` upserts:
 
 | Column | Role |
 |---|---|

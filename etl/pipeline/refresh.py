@@ -10,7 +10,7 @@ from typing import Any
 
 import httpx
 
-from etl.paths import FIXTURES_DIR, load_config, raw_dir
+from etl.core.paths import FIXTURES_DIR, load_config, raw_dir
 
 log = logging.getLogger(__name__)
 
@@ -117,7 +117,7 @@ def refresh(*, force: bool = False, skip_derived: bool = False, fixtures: bool =
         (dest / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 
     if not skip_derived:
-        from etl.derive import rebuild_derived
+        from etl.pipeline.derive import rebuild_derived
 
         rebuild_derived()
 

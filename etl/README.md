@@ -15,6 +15,11 @@ uv run etl --help
 
 | Path | Role |
 |---|---|
+| `etl/cli.py` | Typer entrypoint (`uv run etl`) |
+| `etl/core/` | Shared models, paths, ids, logging |
+| `etl/pipeline/` | `refresh`, `gloss`, `reduce`, `derive`, `extract`, `quality`, `emit`, `generate`, `validate` — [step diagrams](pipeline/README.md) |
+| `etl/store/` | JSONL and Postgres |
+| `etl/commands/` | `doctor`, `stats`, `inspect`, `reset` helpers |
 | `etl/config.yaml` | Leaf languages, ancestor allowlist, reltypes, quality thresholds, source URLs, local `database_url` |
 | `etl/fixtures/` | Tiny committed graph + glosses for tests and local iteration |
 | `etl/tests/` | Pytest: pipeline units, CLI fixture flow, optional Postgres |
@@ -39,7 +44,7 @@ The CLI never creates the `puzzles` table. The Go API applies migrations on star
 
 Expected columns: `id`, `enabled`, `leaf_a`, `leaf_b`, `answer_graph`, `choices`, `correct_choice`, `quality_score`, `lang_pair`, `source`. Upserts key on `id`.
 
-Canonical gold is **`answer_graph` only**. The player prompt is derived as `{nodes: answer_graph.nodes, edges: []}` (`etl.models.prompt_graph_from_answer` / `Puzzle.prompt_graph`). JSONL and Postgres store only `answer_graph` — no `prompt_graph` field or column. The API derives mode-specific prompts at serve time: Hard keeps node glosses and drops edges; Medium exposes opaque leaf tokens for a four-puzzle set. Answer-graph nodes include a gloss whenever the index has one (leaves, LCA, and intermediates).
+Canonical gold is **`answer_graph` only**. The player prompt is derived as `{nodes: answer_graph.nodes, edges: []}` (`etl.core.models.prompt_graph_from_answer` / `Puzzle.prompt_graph`). JSONL and Postgres store only `answer_graph` — no `prompt_graph` field or column. The API derives mode-specific prompts at serve time: Hard keeps node glosses and drops edges; Medium exposes opaque leaf tokens for a four-puzzle set. Answer-graph nodes include a gloss whenever the index has one (leaves, LCA, and intermediates).
 
 | Surface | Behavior |
 |---|---|
@@ -60,9 +65,12 @@ A full refresh is tens of minutes and hundreds of MB. The usual loop is `generat
 
 ## Pipeline stages
 
+Step-by-step diagrams: [`etl/pipeline/README.md`](pipeline/README.md).
+
+
 1. **Reduce graph** — keep leaf langs English / Spanish / Portuguese / German and the ancestor allowlist in config; keep `inherited_from`, `borrowed_from`, `derived_from`, `root`, `cognate_of`, `doublet_with`; drop null related terms, multiword junk, affixes. Drop **cross-term leaf→leaf** ancestor hops (`hipoxia`→`oxygen`) but keep same-term loans (`panel`→`panel`). Align ancestor edges to the winning-gloss parent allowlist; Latin-family nodes with the same macron-folded spelling share reachability (`Late Latin:apostrŏphus` via `Latin:apostrophus`).
 2. **Index glosses** — first *lexical* gloss per `(lang, term)` (skip `form_of` / grammatical-form senses and Wiktionary redirect stubs like `alternative form of …` / `synonym of …`; strip Wiktionary case-government labels like `[with genitive]`). Form-only grammatical entries inherit the citation lemma’s gloss and are recorded in `lemma_index.json` (so LCAs can be rewritten to that lemma). Redirect-only entries inherit the target’s meaning **without** a `lemma_index` entry (surface spelling stays in the gold graph). Puzzles with no LCA gloss are skipped (`no_gloss`).
-3. **Extract puzzles** — two modern leaves and their closest connecting subgraph / LCA (at most 9 nodes; `too_big` otherwise), prefer cross-language via quality score, rewrite form-only LCAs to the citation lemma (`Latin:addere` → `Latin:addō`), unify ancestor nodes that share a gloss (same language with different spelling, or Latin-family langs with the same macron-folded spelling—prefer Classical Latin), then hard-filter in [`etl/generate.py`](etl/generate.py) (`assess_pair`: short/unglossed/inflection LCA, English term≡LCA gloss) and soft-score via [`etl/quality.py`](etl/quality.py) (`quality_score` cheap→expensive with early exit vs `min_quality`), 4-way multiple-choice from other LCA glosses.
+3. **Extract puzzles** — two modern leaves and their closest connecting subgraph / LCA (at most 9 nodes; `too_big` otherwise), prefer cross-language via quality score, rewrite form-only LCAs to the citation lemma (`Latin:addere` → `Latin:addō`), unify ancestor nodes that share a gloss (same language with different spelling, or Latin-family langs with the same macron-folded spelling—prefer Classical Latin), then hard-filter in [`etl/pipeline/generate.py`](pipeline/generate.py) (`assess_pair`: short/unglossed/inflection LCA, English term≡LCA gloss) and soft-score via [`etl/pipeline/quality.py`](pipeline/quality.py) (`quality_score` cheap→expensive with early exit vs `min_quality`), 4-way multiple-choice from other LCA glosses.
 4. **Ids** — SHA-256 of `(leaf_a, leaf_b, lca, gold edges)` so `etl load` upserts instead of duplicating. `generate --db` truncates first, then upserts. `--seed` shuffles English/non-English emit buckets (pair selection) and multiple-choice options.
 
 Walks toward ancestors use `inherited_from` / `borrowed_from` / `derived_from` / `root` only.

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from etl.derive import is_grammatical_gloss, is_redirect_gloss
-from etl.models import Puzzle
-from etl.paths import load_config
+from etl.core.models import Puzzle
+from etl.core.paths import load_config
+from etl.pipeline.gloss import is_grammatical_gloss, is_redirect_gloss
 
 MIN_PUZZLE_ID_LENGTH = 16
 

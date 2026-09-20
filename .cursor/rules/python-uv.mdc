@@ -9,7 +9,7 @@ This repo’s Python lives in the uv-managed virtualenv at `.venv`. Do not call 
 
 ```bash
 # ❌ BAD — system interpreter / tools
-python etl/generate.py
+python etl/pipeline/generate.py
 python3 -m pytest
 pytest
 

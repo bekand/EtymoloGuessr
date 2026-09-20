@@ -4,8 +4,8 @@ import json
 from pathlib import Path
 from typing import Any, Iterable
 
-from etl.models import Puzzle
-from etl.paths import default_puzzles_jsonl
+from etl.core.models import Puzzle
+from etl.core.paths import default_puzzles_jsonl
 
 
 def write_jsonl(puzzles: Iterable[Puzzle], path: Path | None = None) -> Path:

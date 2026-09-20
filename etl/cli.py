@@ -9,18 +9,18 @@ from typing import Optional
 import typer
 from typer import Context
 
-from etl.db import disable_puzzle, fetch_puzzles, truncate_puzzles, upsert_puzzles
-from etl.doctor import doctor_report, format_doctor
-from etl.generate import generate_puzzles, write_funnel
-from etl.inspect_cmd import format_puzzle
-from etl.iojson import puzzles_to_json, read_jsonl, write_jsonl
-from etl.logutil import setup_logging
-from etl.models import Puzzle
-from etl.paths import default_puzzles_jsonl
-from etl.refresh import refresh as refresh_cmd
-from etl.reset import reset_data
-from etl.stats import collect_stats
-from etl.validate import validate_puzzles
+from etl.commands.doctor import doctor_report, format_doctor
+from etl.commands.inspect import format_puzzle
+from etl.commands.reset import reset_data
+from etl.commands.stats import collect_stats
+from etl.core.logutil import setup_logging
+from etl.core.models import Puzzle
+from etl.core.paths import default_puzzles_jsonl
+from etl.pipeline.generate import generate_puzzles, write_funnel
+from etl.pipeline.refresh import refresh as refresh_cmd
+from etl.pipeline.validate import validate_puzzles
+from etl.store.db import disable_puzzle, fetch_puzzles, truncate_puzzles, upsert_puzzles
+from etl.store.iojson import puzzles_to_json, read_jsonl, write_jsonl
 
 if hasattr(sys.stdout, "reconfigure"):
     try:
@@ -183,7 +183,7 @@ def stats(
 ) -> None:
     """Edge counts, puzzle counts by lang-pair, and last generation funnel."""
     payload = collect_stats(jsonl)
-    from etl.paths import reports_dir
+    from etl.core.paths import reports_dir
 
     snapshot = reports_dir() / "stats.json"
     snapshot.parent.mkdir(parents=True, exist_ok=True)

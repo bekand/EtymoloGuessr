@@ -4,38 +4,35 @@ import networkx as nx
 import pandas as pd
 import pytest
 
-from etl.derive import (
+from etl.core.ids import puzzle_id
+from etl.core.models import GraphEdge, Puzzle, node_id
+from etl.pipeline.emit import leaf_reuse_key, make_choices, prepare_score_buckets
+from etl.pipeline.extract import (
+    build_graph,
+    extract_candidates,
+    involves_english,
+    is_proper_noun_leaf,
+    prefer_latin_chain_path,
+    unify_same_gloss_ancestors,
+)
+from etl.pipeline.generate import Funnel
+from etl.pipeline.gloss import (
     etymology_parent_terms,
     first_gloss,
     gloss_for,
     index_gloss_objects,
     is_grammatical_gloss,
-    is_junk_term,
     is_redirect_gloss,
-    reduce_edges,
 )
-from etl.generate import (
-    Funnel,
+from etl.pipeline.quality import (
     assess_pair,
-    build_graph,
-    extract_candidates,
-    involves_english,
-    is_proper_noun_leaf,
-    leaf_reuse_key,
-    make_choices,
-    prefer_latin_chain_path,
-    prepare_score_buckets,
-    unify_same_gloss_ancestors,
-)
-from etl.ids import puzzle_id
-from etl.models import GraphEdge, Puzzle, node_id
-from etl.quality import (
     meaning_overlap,
     normalize_label,
     quality_score,
     shares_meaning,
 )
-from etl.validate import validate_puzzles
+from etl.pipeline.reduce import is_junk_term, reduce_edges
+from etl.pipeline.validate import validate_puzzles
 
 
 def test_first_gloss_joins_colon_qualifier():
