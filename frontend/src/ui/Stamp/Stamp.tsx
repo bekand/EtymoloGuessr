@@ -9,7 +9,6 @@ export type StampTone = 'black' | 'red' | 'green' | 'blue'
 
 type StampProps = {
   children: ReactNode
-  size?: 'md' | 'lg'
   tone?: StampTone
   hint?: string
   className?: string
@@ -17,7 +16,6 @@ type StampProps = {
 
 export function Stamp({
   children,
-  size = 'md',
   tone = 'black',
   hint,
   className,
@@ -30,7 +28,7 @@ export function Stamp({
   const hintId = useId()
   const touchActivationTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const touchActivationPending = useRef(false)
-  const classes = joinClasses('stamp', size, tone, className)
+  const classes = joinClasses('stamp', tone, className)
 
   const clearTouchActivation = () => {
     if (touchActivationTimer.current !== null) {

@@ -1,5 +1,5 @@
 import type { AnimationEventHandler, ReactNode } from 'react'
-import { Colophon, PlayHeader, Sheet } from '@/ui'
+import { PlayHeader, Sheet } from '@/ui'
 import { joinClasses } from '@/utils/joinClasses'
 
 export type ModeShellProps = {
@@ -29,7 +29,6 @@ export function ModeShell({
 			onAnimationEnd={onAnimationEnd}
 		>
 			{children}
-			<Colophon />
 		</Sheet>
 	)
 }

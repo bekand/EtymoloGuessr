@@ -10,6 +10,7 @@ import '@fontsource/ibm-plex-serif/400-italic.css'
 import './styles/global.scss'
 import App from './App.tsx'
 import { queryClient } from '@/query/queryClient'
+import { Colophon } from '@/ui'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -17,6 +18,7 @@ createRoot(document.getElementById('root')!).render(
       <BrowserRouter>
         <App />
       </BrowserRouter>
+      <Colophon />
     </QueryClientProvider>
   </StrictMode>,
 )

@@ -29,7 +29,6 @@
   position: relative;
   @include mx.page-shell(var(--space-5));
   align-items: center;
-  justify-content: center;
   overflow: hidden;
   background: var(--surface);
 
@@ -64,21 +63,29 @@
   .brand {
     margin: 0 0 var(--space-4);
     font-family: var(--font-mono);
-    font-size: clamp(2.5rem, 8vw, 4.25rem);
+    font-size: var(--text-brand);
     font-weight: 600;
     letter-spacing: -0.02em;
     line-height: 0.95;
     color: var(--ink);
     animation: home-brandIn 700ms var(--ease-paper) both;
+
+    @include bp.mobile {
+      font-size: var(--text-brand-sm);
+    }
   }
 
   .headline {
     margin: 0 0 var(--space-6);
     font-family: var(--font-serif);
-    font-size: clamp(1.25rem, 3vw, 1.65rem);
+    font-size: var(--text-lg);
     font-weight: 400;
     line-height: 1.35;
     color: var(--ink-muted);
+
+    @include bp.mobile {
+      font-size: var(--text-md);
+    }
   }
 
   .actions {

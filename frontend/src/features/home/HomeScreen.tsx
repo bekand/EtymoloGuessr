@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { Colophon, Sheet, Stamp } from '@/ui'
+import { Sheet, Stamp } from '@/ui'
 import './HomeScreen.scss'
 
 export function HomeScreen() {
@@ -12,18 +12,17 @@ export function HomeScreen() {
         <p className="brand">EtymoloGuessr</p>
         <h1 className="headline">Trace words to their ancestor</h1>
         <div className="actions">
-          <Stamp size="lg" tone="green" onClick={() => navigate('/easy')} aria-label="Play Easy mode">
+          <Stamp tone="green" onClick={() => navigate('/easy')} aria-label="Play Easy mode">
             Easy
           </Stamp>
           <Stamp
-            size="lg"
             tone="blue"
             onClick={() => navigate('/medium')}
             aria-label="Play Medium mode"
           >
             Medium
           </Stamp>
-          <Stamp size="lg" tone="red" onClick={() => navigate('/hard')} aria-label="Play Hard mode">
+          <Stamp tone="red" onClick={() => navigate('/hard')} aria-label="Play Hard mode">
             Hard
           </Stamp>
         </div>
@@ -39,7 +38,6 @@ export function HomeScreen() {
           </li>
         </ul>
       </Sheet>
-      <Colophon />
     </main>
   )
 }
