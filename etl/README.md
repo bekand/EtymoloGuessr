@@ -270,10 +270,12 @@ Local, no Postgres, fixture graph:
 
 ```bash
 uv run etl refresh --fixtures
-uv run etl generate --n 0 --stdout
+uv run etl generate --n 0
 uv run etl inspect --random
 uv run etl validate
 ```
+
+The default `generate` sink writes `data/puzzles/puzzles.jsonl`; `--stdout` is useful for viewing output but does not create the file used by `inspect` and `validate`.
 
 After Postgres exists (API applies migrations on startup):
 

@@ -17,14 +17,14 @@ flowchart LR
     F --> G[Frontend plays the game]
 ```
 
-The ETL pipeline turns the source datasets into a curated puzzle dataset that the app serves to players.
+The ETL pipeline turns the source datasets into a curated puzzle dataset that the app serves to players. The current production snapshot is committed at `backend/internal/catalog/puzzles.jsonl`, so running the ETL is not required to play locally or deploy the existing catalog.
 
 - Etymology relationships: [etymology-db](https://github.com/droher/etymology-db)
 - Gloss data: [Kaikki glosses](https://kaikki.org/)
 
-These are not committed to the repo, but you can download them using the ETL if you want real data (see below).
+The downloaded source dumps, derived indexes, and scratch puzzle snapshots under `data/` are not committed to the repo. You can download and rebuild them using the ETL if you want to regenerate the catalog (see below). The small ETL fixtures are committed for tests and local pipeline development.
 
-The committed catalog at `backend/internal/catalog/puzzles.jsonl` includes answers (gold graphs and solve payloads). This is an open-data game, not an anti-cheat design: GET routes strip answers for play, and `POST /solve` reveals them by design.
+The committed catalog at `backend/internal/catalog/puzzles.jsonl` is the exception: it is the production JSONL snapshot and includes answers (gold graphs and solve payloads). Postgres is runtime state and is not committed. This is an open-data game, not an anti-cheat design: GET routes strip answers for play, and `POST /solve` reveals them by design.
 
 ## Project layout
 
@@ -44,23 +44,30 @@ Each layer has its own README for deeper details:
 
 ## Run locally
 
-From the repo root:
+The quickest play loop uses the committed catalog and does not need Postgres or the ETL. You need Go 1.24+ and pnpm. Install the frontend dependencies, then run the API and frontend in separate terminals:
 
 ```bash
-uv sync
-docker compose up --build -d
+cd backend
+go run ./cmd/api
 ```
 
-Then load the bundled fixture data and start the web app:
-
 ```bash
-uv run etl reset --all --reload --fixtures
 cd frontend
 pnpm install
 pnpm dev
 ```
 
-The app is typically available at `http://localhost:5173`. The API is served on `http://localhost:8080`, and the local Postgres instance is on `localhost:5432`. Compose DB credentials (`etymologuessr:etymologuessr`) are local-dev and test only; production does not use hosted Postgres.
+The app is typically available at `http://localhost:5173`; the API uses the embedded catalog at `backend/internal/catalog/puzzles.jsonl` and listens on `http://localhost:8080`.
+
+For DB-backed development or ETL work, install the Python environment and start the Compose database/API instead:
+
+```bash
+uv sync
+docker compose up --build -d
+uv run etl load backend/internal/catalog/puzzles.jsonl
+```
+
+Then start the frontend with `pnpm dev` from `frontend/`. Compose exposes Postgres on `localhost:5432` and the API on `localhost:8080`. Compose DB credentials (`etymologuessr:etymologuessr`) are local-dev and test only; production does not use hosted Postgres.
 
 ## Tests
 
@@ -68,8 +75,8 @@ Run the project checks in each area:
 
 ```bash
 uv run pytest -m "not integration"
-cd backend && go test ./...
-cd frontend && pnpm test
+(cd backend && go test ./...)
+(cd frontend && pnpm test)
 ```
 
 For integration and browser tests, use the test stack:
@@ -78,21 +85,26 @@ For integration and browser tests, use the test stack:
 docker compose -f docker-compose.test.yml up -d --wait --build
 export TEST_DATABASE_URL=postgres://etymologuessr:etymologuessr@localhost:5433/etymologuessr?sslmode=disable
 uv run pytest -m integration
-cd backend && TEST_DATABASE_URL=$TEST_DATABASE_URL go test -p 1 ./...
-cd frontend && pnpm exec playwright install chromium && pnpm test:e2e
+(cd backend && TEST_DATABASE_URL=$TEST_DATABASE_URL go test -p 1 ./...)
+(cd frontend && pnpm exec playwright install chromium && pnpm test:e2e)
 ```
+
+The test Compose API is exposed on `http://localhost:18080`; the frontend's Playwright setup uses that URL by default and loads fixture puzzles into the test database.
 
 ## Railway deploy
 
 Deploy this as two services, without a Railway Postgres add-on.
 
-1. Generate a fresh puzzle snapshot locally and copy it into the API embed:
+1. Deploy the committed snapshot. If the puzzle data has changed, generate a replacement locally and copy it into the API embed before deploying:
 
 ```bash
+# Only needed when regenerating the catalog:
 uv run etl refresh
 uv run etl generate --jsonl data/puzzles/puzzles.jsonl
 cp data/puzzles/puzzles.jsonl backend/internal/catalog/puzzles.jsonl
 ```
+
+The API Docker image embeds `backend/internal/catalog/puzzles.jsonl`; Railway does not run the ETL or require Postgres.
 
 2. Create a Railway project with:
 

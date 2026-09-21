@@ -160,11 +160,20 @@ curl -s "http://localhost:8080/puzzles/${ID}?mode=easy"
 
 ### Docker (API + Postgres)
 
+From the repository root:
+
 ```bash
 docker compose up --build
 ```
 
-API is `:8080`, Postgres `:5432`. Schema is applied when the API container starts.
+API is `:8080`, Postgres `:5432`. Schema is applied when the API container starts, but the database starts empty. Load the committed catalog from another terminal before playing:
+
+```bash
+DATABASE_URL=postgres://etymologuessr:etymologuessr@localhost:5432/etymologuessr?sslmode=disable \
+  uv run etl load backend/internal/catalog/puzzles.jsonl
+```
+
+For the simplest local play loop, omit Docker and Postgres: `go run ./cmd/api` serves the same committed catalog in process.
 
 ### Tests
 
