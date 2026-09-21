@@ -35,6 +35,14 @@ export function Colophon({ className }: ColophonProps) {
         >
           Kaikki
         </a>
+        . Source code available on{' '}
+        <a
+          href="https://github.com/bekand/EtymoloGuessr"
+          target="_blank"
+          rel="noreferrer noopener"
+        >
+          GitHub
+        </a>
         .
       </p>
       <p className="line">

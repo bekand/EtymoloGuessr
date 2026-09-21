@@ -48,5 +48,10 @@
       font-size: var(--text-xs);
       line-height: 1.2;
     }
+
+    .streak {
+      overflow: visible;
+      white-space: nowrap;
+    }
   }
 }
