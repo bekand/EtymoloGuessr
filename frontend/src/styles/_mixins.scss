@@ -14,6 +14,7 @@
   flex-direction: column;
   gap: $gap;
   padding: var(--page-gutter);
+    height: 100%;
 
   @include bp.mobile {
     padding: var(--page-gutter-mobile);
