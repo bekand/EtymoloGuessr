@@ -65,6 +65,23 @@ describe('EasyMode', () => {
     expect(screen.getByText('|Streak: 0')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Submit answer' })).toHaveClass('green')
 
+    const explainLeft = screen.getByRole('button', { name: '< Explain' })
+    expect(explainLeft).toHaveAttribute('aria-expanded', 'false')
+    await user.click(explainLeft)
+    expect(explainLeft).toHaveTextContent('Close')
+    expect(explainLeft).toHaveAttribute('aria-expanded', 'true')
+    await user.click(explainLeft)
+    expect(explainLeft).toHaveTextContent('< Explain')
+    expect(explainLeft).toHaveAttribute('aria-expanded', 'false')
+
+    await user.click(explainLeft)
+    expect(explainLeft).toHaveTextContent('Close')
+    const explainRight = screen.getByRole('button', { name: 'Explain >' })
+    await user.click(explainRight)
+    expect(explainRight).toHaveTextContent('Close')
+    expect(explainLeft).toHaveTextContent('< Explain')
+    expect(screen.getAllByRole('button', { name: 'Close' })).toHaveLength(1)
+
     const choice = screen.getByRole('button', { name: /a male parent/ })
     await user.click(choice)
     expect(choice).toHaveClass('selected')

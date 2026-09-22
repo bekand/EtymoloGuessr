@@ -12,9 +12,12 @@ import './EasyMode.scss'
 const CHOICE_TONES = ['yellow', 'pink', 'blue', 'green'] as const
 const CHOICE_MARKERS = ['A', 'B', 'C', 'D'] as const
 
+type ExplainSide = 'left' | 'right'
+
 export function EasyMode() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [explainOpen, setExplainOpen] = useState<'left' | 'right' | null>(null)
+  const [explainOpen, setExplainOpen] = useState<ExplainSide | null>(null)
+  const [instantCloseSide, setInstantCloseSide] = useState<ExplainSide | null>(null)
   const { settling, onAnimationEnd } = useSettlingClip()
   const {
     puzzle,
@@ -52,9 +55,28 @@ export function EasyMode() {
 
   const progressText = selectedId ? 'Choice selected' : 'Choose one'
 
+  function clearExplain() {
+    setExplainOpen(null)
+    setInstantCloseSide(null)
+  }
+
+  function handleExplainOpenChange(side: ExplainSide, open: boolean) {
+    if (open) {
+      if (explainOpen != null && explainOpen !== side) {
+        setInstantCloseSide(explainOpen)
+      } else {
+        setInstantCloseSide(null)
+      }
+      setExplainOpen(side)
+      return
+    }
+    setInstantCloseSide(null)
+    setExplainOpen(null)
+  }
+
   function handleNext() {
     setSelectedId(null)
-    setExplainOpen(null)
+    clearExplain()
     next()
   }
 
@@ -70,7 +92,8 @@ export function EasyMode() {
             gloss={puzzle?.leafA.gloss ?? undefined}
             explainSide="left"
             explainOpen={explainOpen === 'left'}
-            onExplainOpenChange={(open) => setExplainOpen(open ? 'left' : null)}
+            instantClose={instantCloseSide === 'left'}
+            onExplainOpenChange={(open) => handleExplainOpenChange('left', open)}
           />
           <span className="ampersand" aria-hidden="true">
             &amp;
@@ -83,7 +106,8 @@ export function EasyMode() {
             gloss={puzzle?.leafB.gloss ?? undefined}
             explainSide="right"
             explainOpen={explainOpen === 'right'}
-            onExplainOpenChange={(open) => setExplainOpen(open ? 'right' : null)}
+            instantClose={instantCloseSide === 'right'}
+            onExplainOpenChange={(open) => handleExplainOpenChange('right', open)}
           />
         </div>
       </section>
@@ -144,7 +168,7 @@ export function EasyMode() {
               if (!puzzle || !selectedId) {
                 return
               }
-              setExplainOpen(null)
+              clearExplain()
               submit(puzzle, { id: puzzle.id, choiceId: selectedId })
             }}
           >

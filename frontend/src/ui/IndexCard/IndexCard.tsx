@@ -10,6 +10,7 @@ type IndexCardProps = {
   gloss?: string
   explainSide?: ExplainSide
   explainOpen?: boolean
+  instantClose?: boolean
   onExplainOpenChange?: (open: boolean) => void
   placeholder?: boolean
   children?: ReactNode
@@ -22,6 +23,7 @@ export function IndexCard({
   gloss,
   explainSide = 'right',
   explainOpen,
+  instantClose = false,
   onExplainOpenChange,
   placeholder = false,
   children,
@@ -33,7 +35,11 @@ export function IndexCard({
   const controlled = explainOpen !== undefined
   const open = hasGloss && (controlled ? explainOpen : uncontrolledOpen)
   const classes = joinClasses('indexCard', placeholder && 'placeholder', className)
-  const explainLabel = explainSide === 'left' ? '< Explain' : 'Explain >'
+  const explainLabel = open
+    ? 'Close'
+    : explainSide === 'left'
+      ? '< Explain'
+      : 'Explain >'
 
   function toggleExplain() {
     const next = !open
@@ -74,7 +80,7 @@ export function IndexCard({
   ) : null
 
   return (
-    <div className={`indexCardUnit ${explainSide}`}>
+    <div className={joinClasses('indexCardUnit', explainSide, instantClose && 'instantClose')}>
       {explainSide === 'left' ? meaning : null}
       {card}
       {explainSide === 'right' ? meaning : null}

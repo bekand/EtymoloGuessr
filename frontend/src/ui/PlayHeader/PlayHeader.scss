@@ -15,8 +15,13 @@
     align-items: center;
   }
 
+  @include bp.mobile {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
   > :first-child {
     justify-self: start;
+    white-space: nowrap;
   }
 
   .brand {

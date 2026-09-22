@@ -23,7 +23,7 @@
 
   .meaningText {
     margin: 0;
-    width: 20ch;
+    width: 22ch;
     max-height: 8.5rem;
     overflow-y: auto;
     overflow-x: hidden;
@@ -31,13 +31,24 @@
     @include mx.serif-italic(var(--text-sm));
     line-height: 1.4;
     scrollbar-width: thin;
+    overflow-wrap: break-word;
+    word-break: normal;
+    white-space: wrap;
   }
 
   .meaning.open {
-    max-width: 18ch;
+    max-width: 22ch;
     max-height: 8.5rem;
     opacity: 1;
     pointer-events: auto;
+  }
+
+  &.instantClose .meaning {
+    transition:
+      max-width 0s,
+      max-height 0s,
+      margin 0s,
+      opacity 0s;
   }
 
   &.left .meaningText {
@@ -134,10 +145,27 @@
       padding-top: 0;
     }
   }
+
+  .indexCardUnit {
+    .meaningText {
+      width: 16ch;
+    }
+
+    .meaning.open {
+      max-width: 16ch;
+    }
+  }
 }
 
 @include bp.mobile {
   .indexCardUnit {
     width: 100%;
+    max-width: 100%;
+    min-width: 0;
+
+    .indexCard {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
   }
 }
